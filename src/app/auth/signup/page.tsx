@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Crown, Users, Briefcase, Shield, ArrowRight, LogIn } from 'lucide-react';
+import { Crown, Users, Briefcase, ArrowRight, LogIn } from 'lucide-react';
+import Image from 'next/image';
 
 export default function SignupSelection() {
   const router = useRouter();
@@ -60,8 +61,16 @@ export default function SignupSelection() {
       <div className="max-w-4xl w-full space-y-8">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-indigo-100 rounded-full">
-              <Shield className="w-12 h-12 text-indigo-600" />
+            <div className="p-3 bg-white rounded-full shadow-sm border border-gray-200">
+              <div className="relative w-16 h-16">
+                <Image
+                  src="/assets/logo.png"
+                  alt="Euroshub Logo"
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
             </div>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
