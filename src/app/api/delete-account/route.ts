@@ -27,9 +27,7 @@ export async function DELETE(request: Request) {
 
     await connectToDatabase();
 
-    // Delete user's cases first (if needed)
 
-    // Then delete the user
     await User.findByIdAndDelete(userId);
 
     return NextResponse.json<IApiResponse>(

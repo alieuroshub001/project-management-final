@@ -8,12 +8,16 @@ import { JWT } from 'next-auth/jwt';
 import { AdapterUser } from 'next-auth/adapters';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import User from '@/models/User';
+import OTP from '@/models/OTP';
 import connectToDatabase from './db';
 
 // Extended user type for NextAuth
 interface ExtendedUser extends NextAuthUser {
   id: string;
   role: string;
+  employeeId?: string;
+  isApproved: boolean;
+  accountActivated: boolean;
 }
 
 // Type augmentation for NextAuth
@@ -24,6 +28,9 @@ declare module 'next-auth' {
       name?: string | null;
       email?: string | null;
       role: string;
+      employeeId?: string;
+      isApproved: boolean;
+      accountActivated: boolean;
     };
   }
 }
@@ -32,6 +39,9 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     role: string;
+    employeeId?: string;
+    isApproved: boolean;
+    accountActivated: boolean;
   }
 }
 
@@ -47,56 +57,31 @@ export async function verifyPassword(
   return await bcrypt.compare(password, hashedPassword);
 }
 
-// OTP utilities
+// OTP utilities - Updated to use the OTP model's static methods
 export function generateOTP(length = 6): string {
-  const digits = '0123456789';
-  let otp = '';
-  for (let i = 0; i < length; i++) {
-    otp += digits[Math.floor(Math.random() * 10)];
-  }
-  return otp;
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export async function createOTPRecord(
-  email: string,
-  type: IOTP['type'],
-  role: string
-): Promise<string> {
-  const OTP = (await import('@/models/OTP')).default;
-  const otp = generateOTP();
+  userEmail: string,
+  userRole: string,
+  type: IOTP['type']
+): Promise<{ otp: string; recipientEmail: string }> {
+  await connectToDatabase();
   
-  // Get the actual recipient email based on role
-  let recipientEmail = email;
-  if (role === 'admin') {
-    recipientEmail = process.env.ADMIN_EMAIL || email;
-  }
- 
-  await OTP.findOneAndUpdate(
-    { email, type },
-    { otp, role, expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
-    { upsert: true, new: true }
-  );
-  
-  // Send OTP via email to the appropriate recipient
-  await sendOTPEmail(recipientEmail, otp, type, role);
- 
-  return otp;
+  // Use the OTP model's static method
+  return await OTP.createOTP(userEmail, userRole, type);
 }
 
 export async function verifyOTP(
-  email: string,
+  userEmail: string,
   otp: string,
   type: IOTP['type']
 ): Promise<boolean> {
-  const OTP = (await import('@/models/OTP')).default;
-  const record = await OTP.findOne({ email, otp, type });
- 
-  if (!record || record.expiresAt < new Date()) {
-    return false;
-  }
- 
-  await OTP.deleteOne({ id: record.id });
-  return true;
+  await connectToDatabase();
+  
+  // Use the OTP model's static method
+  return await OTP.verifyOTP(userEmail, otp, type);
 }
 
 // Token utilities
@@ -112,27 +97,6 @@ interface JwtCallbackParams {
   trigger?: "signIn" | "signUp" | "update";
   isNewUser?: boolean;
   session?: Session;
-}
-
-// Email validation utility
-export function validateEmailForRole(email: string, role: string): { isValid: boolean; error?: string } {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  
-  if (!emailRegex.test(email)) {
-    return { isValid: false, error: 'Invalid email format' };
-  }
-
-  if (role === 'hr' || role === 'employee') {
-    const requiredDomain = 'euroshub@gmail.com';
-    if (!email.endsWith(requiredDomain)) {
-      return { 
-        isValid: false, 
-        error: `Email must end with ${requiredDomain} for ${role} role` 
-      };
-    }
-  }
-
-  return { isValid: true };
 }
 
 // NextAuth Configuration
@@ -153,6 +117,16 @@ export const authOptions = {
         if (!user.emailVerified) {
           throw new Error('Please verify your email first');
         }
+
+        // Check if user is approved (admin is auto-approved)
+        if (!user.isApproved) {
+          throw new Error('Your account is pending admin approval');
+        }
+
+        // Check if account is activated (admin is auto-activated)
+        if (!user.accountActivated) {
+          throw new Error('Please activate your account with your employee ID');
+        }
        
         const isValid = await verifyPassword(
           credentials?.password || '',
@@ -164,7 +138,10 @@ export const authOptions = {
           id: user._id.toString(),
           name: user.name,
           email: user.email,
-          role: user.role
+          role: user.role,
+          employeeId: user.employeeId,
+          isApproved: user.isApproved,
+          accountActivated: user.accountActivated
         };
       }
     })
@@ -173,8 +150,12 @@ export const authOptions = {
     async jwt(params: JwtCallbackParams) {
       const { token, user } = params;
       if (user && 'role' in user) {
-        token.id = user.id;
-        token.role = (user as ExtendedUser).role;
+        const extendedUser = user as ExtendedUser;
+        token.id = extendedUser.id;
+        token.role = extendedUser.role;
+        token.employeeId = extendedUser.employeeId;
+        token.isApproved = extendedUser.isApproved;
+        token.accountActivated = extendedUser.accountActivated;
       }
       return token;
     },
@@ -182,6 +163,9 @@ export const authOptions = {
       if (session.user) {
         session.user.id = token.id;
         session.user.role = token.role;
+        session.user.employeeId = token.employeeId;
+        session.user.isApproved = token.isApproved;
+        session.user.accountActivated = token.accountActivated;
       }
       return session;
     }
