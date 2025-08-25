@@ -19,31 +19,52 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
     const body: IBreakEndRequest = await request.json();
     
-    const { breakId } = body;
+    const { breakId, end } = body;
+    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    // Get today's attendance
-    const attendance = await Attendance.getTodayAttendance(session.user.id);
+    // Find today's attendance record
+    const attendance = await Attendance.findOne({
+      employeeId: session.user.id,
+      date: today
+    });
+
     if (!attendance) {
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: 'No check-in found for today'
-      }, { status: 400 });
+        message: 'No attendance record found for today.'
+      }, { status: 404 });
     }
 
-    if (attendance.checkOut) {
+    // Find the break
+    const breakRecord = attendance.breaks.id(breakId);
+    if (!breakRecord) {
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: 'Already checked out, cannot end break'
+        message: 'Break not found'
+      }, { status: 404 });
+    }
+
+    if (breakRecord.end) {
+      return NextResponse.json<IAttendanceApiResponse>({
+        success: false,
+        message: 'Break already ended'
       }, { status: 400 });
     }
 
-    // End break
-    attendance.endBreak(breakId);
+    // End the break
+    breakRecord.end = end ? new Date(end) : now;
+
+    // Update status back to present
+    attendance.status = 'present';
+
     await attendance.save();
 
     return NextResponse.json<IAttendanceApiResponse>({
       success: true,
-      message: 'Break ended successfully'
+      message: 'Break ended successfully',
+      data: attendance
     });
 
   } catch (error) {

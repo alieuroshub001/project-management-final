@@ -1,532 +1,486 @@
 // models/employee/Attendance.ts
 import mongoose, { Schema, Model, Document, Types } from 'mongoose';
-import type { 
+import { 
   IAttendance, 
-  IShift, 
+  ICheckIn, 
+  ICheckOut, 
   IBreak, 
-  INamazBreak, 
-  ITask, 
-  IGeoLocation,
-  IShiftCalendar,
-  IShiftSchedule,
-  IEmployeeShiftAssignment,
-  IDayOff,
-  IHoliday,
+  ITask,
+  ShiftType,
   AttendanceStatus,
-  CheckInStatus,
   BreakType,
-  NamazType,
-  TaskStatus,
-  DayOfWeek
+  TaskPriority
 } from '@/types/employee/attendance';
 
-// GeoLocation Schema
-const GeoLocationSchema = new Schema({
-  latitude: { type: Number, required: true },
-  longitude: { type: Number, required: true },
-  accuracy: { type: Number },
-  timestamp: { type: Date, required: true },
-  address: { type: String }
-}, { _id: false });
-
-// Break Schema
-const BreakSchema = new Schema({
-  attendanceId: { type: Schema.Types.ObjectId, ref: 'Attendance', required: true },
-  breakType: { 
-    type: String, 
-    enum: ['general', 'lunch', 'tea', 'personal', 'other'],
-    required: true 
-  },
-  startTime: { type: Date, required: true },
-  endTime: { type: Date },
-  duration: { type: Number }, // In minutes
-  reason: { type: String },
-  // For namaz breaks
-  namazType: {
-    type: String,
-    enum: ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']
-  },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Task Schema
-const TaskSchema = new Schema({
-  attendanceId: { type: Schema.Types.ObjectId, ref: 'Attendance', required: true },
-  description: { type: String, required: true, maxlength: 500 },
-  startTime: { type: Date, required: true },
-  endTime: { type: Date },
-  timeSpent: { type: Number }, // In minutes
-  status: { 
-    type: String, 
-    enum: ['in-progress', 'completed', 'pending', 'cancelled'],
-    default: 'pending'
-  },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Shift Schema
-const ShiftSchema = new Schema({
-  name: { type: String, required: true },
-  startTime: { 
-    type: String, 
-    required: true,
-    validate: {
-      validator: (v: string) => /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(v),
-      message: 'Start time must be in HH:mm format'
-    }
-  },
-  endTime: { 
-    type: String, 
-    required: true,
-    validate: {
-      validator: (v: string) => /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(v),
-      message: 'End time must be in HH:mm format'
-    }
-  },
-  gracePeriod: { type: Number, default: 15, min: 0, max: 120 }, // Minutes
-  isNightShift: { type: Boolean, default: false },
-  isActive: { type: Boolean, default: true },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Holiday Schema
-const HolidaySchema = new Schema({
-  name: { type: String, required: true },
-  date: { type: Date, required: true },
-  description: { type: String },
-  isRecurring: { type: Boolean, default: false },
-  recurringType: {
-    type: String,
-    enum: ['yearly', 'monthly', 'weekly']
-  },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Day Off Schema
-const DayOffSchema = new Schema({
-  calendarId: { type: Schema.Types.ObjectId, ref: 'ShiftCalendar', required: true },
-  date: { type: Date, required: true },
-  description: { type: String, required: true },
-  isRecurring: { type: Boolean, default: false },
-  recurringType: {
-    type: String,
-    enum: ['yearly', 'monthly', 'weekly']
-  },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Shift Schedule Schema
-const ShiftScheduleSchema = new Schema({
-  calendarId: { type: Schema.Types.ObjectId, ref: 'ShiftCalendar', required: true },
-  shiftId: { type: Schema.Types.ObjectId, ref: 'Shift', required: true },
-  dayOfWeek: {
-    type: String,
-    enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-    required: true
-  },
-  isActive: { type: Boolean, default: true },
-  effectiveFrom: { type: Date, required: true },
-  effectiveTo: { type: Date },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Shift Calendar Schema
-const ShiftCalendarSchema = new Schema({
-  name: { type: String, required: true },
-  description: { type: String },
-  year: { type: Number, required: true, min: 2020, max: 2100 },
-  isDefault: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Employee Shift Assignment Schema
-const EmployeeShiftAssignmentSchema = new Schema({
-  employeeId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  shiftId: { type: Schema.Types.ObjectId, ref: 'Shift', required: true },
-  calendarId: { type: Schema.Types.ObjectId, ref: 'ShiftCalendar', required: true },
-  startDate: { type: Date, required: true },
-  endDate: { type: Date },
-  isDefault: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Main Attendance Schema
-const AttendanceSchema = new Schema({
-  employeeId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  employeeName: { type: String, required: true },
-  employeeEmail: { type: String, required: true },
-  employeeMobile: { type: String, required: true },
-  date: { type: Date, required: true }, // The date of attendance record
-  shiftId: { type: Schema.Types.ObjectId, ref: 'Shift', required: true },
-  shiftName: { type: String, required: true },
-  shiftStartTime: { type: String, required: true },
-  shiftEndTime: { type: String, required: true },
+// Define the document interface that extends mongoose Document
+export interface IAttendanceDocument extends Document {
+  employeeId: Types.ObjectId;
+  employeeName: string;
+  employeeEmail: string;
+  employeeMobile: string;
+  date: Date;
+  shift: ShiftType;
+  scheduledStart: Date;
+  scheduledEnd: Date;
+  checkIns: Types.Array<ICheckIn>;
+  checkOuts: Types.Array<ICheckOut>;
+  breaks: Types.Array<IBreak>;
+  totalHours: number;
+  regularHours: number;
+  overtimeHours: number;
+  breakHours: number;
+  status: AttendanceStatus;
+  lateMinutes: number;
+  earlyDepartureMinutes: number;
+  tasks: Types.Array<ITask>;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
   
-  // Check-in/out details
-  checkIn: { type: Date, required: true },
-  checkOut: { type: Date },
-  checkInLocation: GeoLocationSchema,
-  checkOutLocation: GeoLocationSchema,
-  checkInReason: { type: String }, // Reason for late check-in
-  checkInStatus: {
-    type: String,
-    enum: ['on-time', 'late', 'early', 'no-check-in', 'no-check-out'],
-    required: true
-  },
-  
-  // Break details (embedded)
-  breaks: [BreakSchema],
-  namazBreaks: [BreakSchema], // Same schema but will have namazType field
-  
-  // Work details
-  totalHours: { type: Number, default: 0, min: 0 },
-  actualWorkHours: { type: Number, default: 0, min: 0 },
-  overtimeHours: { type: Number, default: 0, min: 0 },
-  
-  // Task details (embedded)
-  tasks: [TaskSchema],
-  
-  status: {
-    type: String,
-    enum: ['present', 'absent', 'half-day', 'on-leave', 'holiday', 'weekend'],
-    default: 'present'
-  },
-  notes: { type: String, maxlength: 1000 },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-// Document interfaces - Omit 'id' from the original interfaces to avoid conflicts
-export interface IAttendanceDocument extends Omit<IAttendance, 'id'>, Document {
-  calculateHours(): void;
-  isLate(): boolean;
-  canCheckOut(): boolean;
-  addTask(task: Omit<ITask, 'id' | 'attendanceId' | 'createdAt' | 'updatedAt'>): void;
-  startBreak(breakType: BreakType, namazType?: NamazType): string;
-  endBreak(breakId: string): void;
+  // Instance methods
+  calculateTotalHours(): number;
+  isCurrentlyCheckedIn(): boolean;
+  getCurrentBreak(): IBreak | null;
 }
 
-export interface IShiftDocument extends Omit<IShift, 'id'>, Document {
-  isCurrentlyActive(): boolean;
-  getNextShift(): Date | null;
+// Define the check-in subdocument interface
+export interface ICheckInDocument extends Document {
+  timestamp: Date;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    address?: string;
+  };
+  isLate: boolean;
+  lateMinutes: number;
+  deviceInfo?: string;
+  imageCapture?: string;
 }
 
-export interface IBreakDocument extends Omit<IBreak, 'id'>, Document {}
-export interface ITaskDocument extends Omit<ITask, 'id'>, Document {}
-export interface IHolidayDocument extends Omit<IHoliday, 'id'>, Document {}
-export interface IDayOffDocument extends Omit<IDayOff, 'id'>, Document {}
-export interface IShiftCalendarDocument extends Omit<IShiftCalendar, 'id' | 'shifts'>, Document {
-  shifts?: Types.ObjectId[];
-}
-export interface IShiftScheduleDocument extends Omit<IShiftSchedule, 'id' | 'shift'>, Document {
-  shift?: Types.ObjectId;
-}
-export interface IEmployeeShiftAssignmentDocument extends Omit<IEmployeeShiftAssignment, 'id' | 'shift' | 'calendar'>, Document {
-  shift?: Types.ObjectId;
-  calendar?: Types.ObjectId;
+// Define the check-out subdocument interface
+export interface ICheckOutDocument extends Document {
+  timestamp: Date;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    address?: string;
+  };
+  isEarly: boolean;
+  earlyMinutes: number;
+  tasksCompleted: boolean;
+  deviceInfo?: string;
+  imageCapture?: string;
 }
 
-// Model interfaces for static methods
+// Define the break subdocument interface
+export interface IBreakDocument extends Document {
+  type: BreakType;
+  start: Date;
+  end?: Date;
+  duration?: number;
+  isPaid: boolean;
+}
+
+// Define the task subdocument interface
+export interface ITaskDocument extends Document {
+  description: string;
+  timeAllocated: number;
+  timeSpent: number;
+  completed: boolean;
+  priority: TaskPriority;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Define static methods interface
 interface IAttendanceModel extends Model<IAttendanceDocument> {
   findByEmployee(employeeId: string, startDate?: Date, endDate?: Date): Promise<IAttendanceDocument[]>;
   findByDate(date: Date): Promise<IAttendanceDocument[]>;
-  getTodayAttendance(employeeId: string): Promise<IAttendanceDocument | null>;
-  getMonthlyAttendance(employeeId: string, year: number, month: number): Promise<IAttendanceDocument[]>;
+  findCurrentAttendance(employeeId: string): Promise<IAttendanceDocument | null>;
+  getAttendanceSummary(employeeId: string, startDate: Date, endDate: Date): Promise<any>;
 }
 
-interface IShiftModel extends Model<IShiftDocument> {
-  findActive(): Promise<IShiftDocument[]>;
-  findByTime(time: string): Promise<IShiftDocument[]>;
-}
+// CheckIn Subdocument Schema
+const CheckInSchema: Schema = new Schema({
+  timestamp: { 
+    type: Date, 
+    required: true,
+    default: Date.now
+  },
+  location: {
+    latitude: { type: Number },
+    longitude: { type: Number },
+    accuracy: { type: Number },
+    address: { type: String }
+  },
+  isLate: { 
+    type: Boolean, 
+    default: false 
+  },
+  lateMinutes: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  deviceInfo: { type: String },
+  imageCapture: { type: String } // URL to check-in image
+});
 
-// Indexes
+// CheckOut Subdocument Schema
+const CheckOutSchema: Schema = new Schema({
+  timestamp: { 
+    type: Date, 
+    required: true,
+    default: Date.now
+  },
+  location: {
+    latitude: { type: Number },
+    longitude: { type: Number },
+    accuracy: { type: Number },
+    address: { type: String }
+  },
+  isEarly: { 
+    type: Boolean, 
+    default: false 
+  },
+  earlyMinutes: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  tasksCompleted: { 
+    type: Boolean, 
+    default: false 
+  },
+  deviceInfo: { type: String },
+  imageCapture: { type: String } // URL to check-out image
+});
+
+// Break Subdocument Schema
+const BreakSchema: Schema = new Schema({
+  type: { 
+    type: String, 
+    enum: ['lunch', 'tea', 'rest', 'prayer', 'personal', 'emergency'],
+    required: true 
+  },
+  start: { 
+    type: Date, 
+    required: true,
+    default: Date.now
+  },
+  end: { type: Date },
+  duration: { 
+    type: Number, 
+    min: 0 
+  }, // in minutes
+  isPaid: { 
+    type: Boolean, 
+    default: false 
+  }
+});
+
+// Task Subdocument Schema
+const TaskSchema: Schema = new Schema({
+  description: { 
+    type: String, 
+    required: true,
+    maxlength: 500
+  },
+  timeAllocated: { 
+    type: Number, 
+    required: true,
+    min: 1,
+    max: 480 // 8 hours in minutes
+  },
+  timeSpent: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  completed: { 
+    type: Boolean, 
+    default: false 
+  },
+  priority: { 
+    type: String, 
+    enum: ['low', 'medium', 'high', 'critical'],
+    default: 'medium'
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
+  updatedAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+});
+
+// Main Attendance Schema
+const AttendanceSchema: Schema<IAttendanceDocument> = new Schema({
+  employeeId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: true 
+  },
+  employeeName: { 
+    type: String, 
+    required: true 
+  },
+  employeeEmail: { 
+    type: String, 
+    required: true 
+  },
+  employeeMobile: { 
+    type: String, 
+    required: true 
+  },
+  date: { 
+    type: Date, 
+    required: true,
+    index: true
+  },
+  shift: { 
+    type: String, 
+    enum: ['morning', 'evening', 'night', 'custom'],
+    required: true 
+  },
+  scheduledStart: { 
+    type: Date, 
+    required: true 
+  },
+  scheduledEnd: { 
+    type: Date, 
+    required: true 
+  },
+  checkIns: [CheckInSchema],
+  checkOuts: [CheckOutSchema],
+  breaks: [BreakSchema],
+  totalHours: { 
+    type: Number, 
+    default: 0,
+    min: 0,
+    max: 24
+  },
+  regularHours: { 
+    type: Number, 
+    default: 0,
+    min: 0,
+    max: 24
+  },
+  overtimeHours: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  breakHours: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  status: { 
+    type: String, 
+    enum: [
+      'present', 'absent', 'late', 'half-day', 'early-departure', 
+      'on-break', 'holiday', 'weekend', 'leave'
+    ],
+    default: 'absent'
+  },
+  lateMinutes: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  earlyDepartureMinutes: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  tasks: [TaskSchema],
+  notes: { 
+    type: String,
+    maxlength: 1000
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
+  updatedAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+});
+
+// Indexes for better query performance
 AttendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true });
+AttendanceSchema.index({ date: 1, status: 1 });
 AttendanceSchema.index({ employeeId: 1, createdAt: -1 });
-AttendanceSchema.index({ date: 1 });
 AttendanceSchema.index({ status: 1 });
-AttendanceSchema.index({ shiftId: 1, date: 1 });
 
-ShiftSchema.index({ name: 1 }, { unique: true });
-ShiftSchema.index({ isActive: 1 });
-
-ShiftCalendarSchema.index({ year: 1, isDefault: 1 });
-ShiftScheduleSchema.index({ calendarId: 1, dayOfWeek: 1 });
-EmployeeShiftAssignmentSchema.index({ employeeId: 1, startDate: 1 });
-HolidaySchema.index({ date: 1 });
-DayOffSchema.index({ calendarId: 1, date: 1 });
-
-// Pre-save middleware
+// Pre-save middleware to update timestamps and calculate hours
 AttendanceSchema.pre('save', function(next) {
   this.updatedAt = new Date();
-  (this as any).calculateHours();
-  next();
-});
-
-ShiftSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-ShiftCalendarSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-ShiftScheduleSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-EmployeeShiftAssignmentSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-HolidaySchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-DayOffSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-// Instance methods
-AttendanceSchema.methods.calculateHours = function() {
-  if (!this.checkIn) return;
   
-  const checkInTime = new Date(this.checkIn);
-  const checkOutTime = this.checkOut ? new Date(this.checkOut) : new Date();
-  
-  // Calculate total hours
-  const totalMs = checkOutTime.getTime() - checkInTime.getTime();
-  this.totalHours = totalMs / (1000 * 60 * 60);
-  
-  // Calculate break time
-  let totalBreakTime = 0;
-  [...this.breaks, ...this.namazBreaks].forEach((break_: any) => {
-    if (break_.endTime) {
-      const breakMs = new Date(break_.endTime).getTime() - new Date(break_.startTime).getTime();
-      totalBreakTime += breakMs / (1000 * 60 * 60);
-    }
-  });
-  
-  // Calculate actual work hours
-  this.actualWorkHours = Math.max(0, this.totalHours - totalBreakTime);
-  
-  // Calculate overtime (assuming 8 hours is standard)
-  this.overtimeHours = Math.max(0, this.actualWorkHours - 8);
-};
-
-AttendanceSchema.methods.isLate = function(): boolean {
-  return this.checkInStatus === 'late';
-};
-
-AttendanceSchema.methods.canCheckOut = function(): boolean {
-  return !!this.checkIn && !this.checkOut;
-};
-
-AttendanceSchema.methods.addTask = function(
-  task: Omit<ITask, 'id' | 'attendanceId' | 'createdAt' | 'updatedAt'>
-) {
-  const newTask = {
-    ...task,
-    attendanceId: this._id.toString(),
-    timeSpent: task.timeSpent || (task.endTime && task.startTime ? 
-      Math.round((new Date(task.endTime).getTime() - new Date(task.startTime).getTime()) / (1000 * 60)) : 0),
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
-  
-  this.tasks.push(newTask);
-};
-
-AttendanceSchema.methods.startBreak = function(
-  breakType: BreakType, 
-  namazType?: NamazType
-): string {
-  const breakData = {
-    attendanceId: this._id.toString(),
-    breakType,
-    startTime: new Date(),
-    namazType,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
-  
-  if (namazType) {
-    this.namazBreaks.push(breakData);
-    return this.namazBreaks[this.namazBreaks.length - 1]._id.toString();
-  } else {
-    this.breaks.push(breakData);
-    return this.breaks[this.breaks.length - 1]._id.toString();
-  }
-};
-
-AttendanceSchema.methods.endBreak = function(breakId: string) {
-  const endTime = new Date();
-  
-  // Try to find in regular breaks
-  const regularBreak = this.breaks.find((b: any) => b._id.toString() === breakId);
-  if (regularBreak) {
-    regularBreak.endTime = endTime;
-    const duration = Math.round((endTime.getTime() - new Date(regularBreak.startTime).getTime()) / (1000 * 60));
-    regularBreak.duration = duration;
-    regularBreak.updatedAt = endTime;
-    return;
+  // Calculate total hours if we have check-ins and check-outs
+  if (this.checkIns.length > 0 && this.checkOuts.length > 0) {
+    const lastCheckOut = this.checkOuts[this.checkOuts.length - 1].timestamp;
+    const firstCheckIn = this.checkIns[0].timestamp;
+    const totalMs = lastCheckOut.getTime() - firstCheckIn.getTime();
+    this.totalHours = parseFloat((totalMs / (1000 * 60 * 60)).toFixed(2));
+    
+    // Calculate break hours
+    this.breakHours = this.breaks.reduce((total, breakItem) => {
+      if (breakItem.end) {
+        const breakMs = breakItem.end.getTime() - breakItem.start.getTime();
+        return total + (breakMs / (1000 * 60 * 60));
+      }
+      return total;
+    }, 0);
+    
+    // Calculate regular hours (total hours minus breaks)
+    this.regularHours = parseFloat((this.totalHours - this.breakHours).toFixed(2));
+    
+    // Calculate overtime (anything over 8 regular hours)
+    this.overtimeHours = Math.max(0, this.regularHours - 8);
   }
   
-  // Try to find in namaz breaks
-  const namazBreak = this.namazBreaks.find((b: any) => b._id.toString() === breakId);
-  if (namazBreak) {
-    namazBreak.endTime = endTime;
-    const duration = Math.round((endTime.getTime() - new Date(namazBreak.startTime).getTime()) / (1000 * 60));
-    namazBreak.duration = duration;
-    namazBreak.updatedAt = endTime;
-  }
-};
+  next();
+});
 
-// Static methods
-AttendanceSchema.static('findByEmployee', function(
+// Pre-save middleware for breaks to calculate duration
+BreakSchema.pre('save', function(next) {
+  if (this.end && this.isModified('end')) {
+    const durationMs = this.end.getTime() - this.start.getTime();
+    this.duration = parseFloat((durationMs / (1000 * 60)).toFixed(2)); // in minutes
+  }
+  next();
+});
+
+// Pre-save middleware for tasks to update timestamp
+TaskSchema.pre('save', function(next) {
+  if (this.isModified()) {
+    this.updatedAt = new Date();
+  }
+  next();
+});
+
+// Virtual for checking if attendance is active (currently checked in)
+AttendanceSchema.virtual('isActive').get(function() {
+  return this.checkIns.length > 0 && 
+         (this.checkOuts.length === 0 || 
+          this.checkOuts[this.checkOuts.length - 1].timestamp < 
+          this.checkIns[this.checkIns.length - 1].timestamp);
+});
+
+// Virtual for current check-in status
+AttendanceSchema.virtual('currentCheckIn').get(function() {
+  if (this.checkIns.length > 0) {
+    return this.checkIns[this.checkIns.length - 1];
+  }
+  return null;
+});
+
+// Static method to find attendance by employee
+AttendanceSchema.statics.findByEmployee = function(
   employeeId: string, 
   startDate?: Date, 
   endDate?: Date
-) {
-  const query: any = { employeeId };
+): Promise<IAttendanceDocument[]> {
+  let query: any = { employeeId };
   
-  if (startDate || endDate) {
-    query.date = {};
-    if (startDate) query.date.$gte = startDate;
-    if (endDate) query.date.$lte = endDate;
+  if (startDate && endDate) {
+    query.date = { $gte: startDate, $lte: endDate };
+  } else if (startDate) {
+    query.date = { $gte: startDate };
+  } else if (endDate) {
+    query.date = { $lte: endDate };
   }
   
   return this.find(query).sort({ date: -1 });
-});
+};
 
-AttendanceSchema.static('findByDate', function(date: Date) {
+// Static method to find attendance by date
+AttendanceSchema.statics.findByDate = function(date: Date): Promise<IAttendanceDocument[]> {
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
+  
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
   
-  return this.find({
-    date: {
-      $gte: startOfDay,
-      $lte: endOfDay
-    }
+  return this.find({ 
+    date: { $gte: startOfDay, $lte: endOfDay } 
   });
-});
+};
 
-AttendanceSchema.static('getTodayAttendance', function(employeeId: string) {
+// Static method to find current attendance (today's record)
+AttendanceSchema.statics.findCurrentAttendance = function(employeeId: string): Promise<IAttendanceDocument | null> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
   
-  return this.findOne({
-    employeeId,
-    date: {
-      $gte: today,
-      $lt: tomorrow
-    }
+  return this.findOne({ 
+    employeeId, 
+    date: today 
   });
-});
+};
 
-AttendanceSchema.static('getMonthlyAttendance', function(
+// Static method to get attendance summary
+AttendanceSchema.statics.getAttendanceSummary = async function(
   employeeId: string, 
-  year: number, 
-  month: number
-) {
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0);
+  startDate: Date, 
+  endDate: Date
+): Promise<any> {
+  const attendances = await this.findByEmployee(employeeId, startDate, endDate);
   
-  return this.find({
-    employeeId,
-    date: {
-      $gte: startDate,
-      $lte: endDate
-    }
-  }).sort({ date: 1 });
-});
-
-ShiftSchema.static('findActive', function() {
-  return this.find({ isActive: true });
-});
-
-ShiftSchema.static('findByTime', function(time: string) {
-  return this.find({
-    $or: [
-      { startTime: { $lte: time }, endTime: { $gte: time } },
-      { isNightShift: true, $or: [
-        { startTime: { $lte: time } },
-        { endTime: { $gte: time } }
-      ]}
-    ],
-    isActive: true
-  });
-});
-
-ShiftSchema.methods.isCurrentlyActive = function(): boolean {
-  const now = new Date();
-  const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  const summary = {
+    totalDays: attendances.length,
+    presentDays: attendances.filter((a: { status: string; }) => a.status === 'present').length,
+    absentDays: attendances.filter((a: { status: string; }) => a.status === 'absent').length,
+    lateDays: attendances.filter((a: { lateMinutes: number; }) => a.lateMinutes > 0).length,
+    earlyDepartureDays: attendances.filter((a: { earlyDepartureMinutes: number; }) => a.earlyDepartureMinutes > 0).length,
+    totalRegularHours: attendances.reduce((sum: any, a: { regularHours: any; }) => sum + a.regularHours, 0),
+    totalOvertimeHours: attendances.reduce((sum: any, a: { overtimeHours: any; }) => sum + a.overtimeHours, 0),
+    averageHoursPerDay: attendances.length > 0 ? 
+      parseFloat((attendances.reduce((sum: any, a: { regularHours: any; }) => sum + a.regularHours, 0) / attendances.length).toFixed(2)) : 0,
+    attendanceRate: attendances.length > 0 ? 
+      parseFloat(((attendances.filter((a: { status: string; }) => a.status === 'present').length / attendances.length) * 100).toFixed(2)) : 0
+  };
   
-  if (this.isNightShift) {
-    // Night shift logic - spans across midnight
-    return currentTime >= this.startTime || currentTime <= this.endTime;
-  } else {
-    return currentTime >= this.startTime && currentTime <= this.endTime;
-  }
+  return summary;
 };
 
-ShiftSchema.methods.getNextShift = function(): Date | null {
-  const now = new Date();
-  const [hours, minutes] = this.startTime.split(':').map(Number);
-  
-  const nextShift = new Date(now);
-  nextShift.setHours(hours, minutes, 0, 0);
-  
-  // If the shift time has passed today, schedule for tomorrow
-  if (nextShift <= now) {
-    nextShift.setDate(nextShift.getDate() + 1);
+// Instance method to calculate total hours
+AttendanceSchema.methods.calculateTotalHours = function(): number {
+  if (this.checkIns.length === 0 || this.checkOuts.length === 0) {
+    return 0;
   }
   
-  return nextShift;
+  const lastCheckOut = this.checkOuts[this.checkOuts.length - 1].timestamp;
+  const firstCheckIn = this.checkIns[0].timestamp;
+  const totalMs = lastCheckOut.getTime() - firstCheckIn.getTime();
+  
+  return parseFloat((totalMs / (1000 * 60 * 60)).toFixed(2));
 };
 
-// Create models
-const Attendance: IAttendanceModel = 
-  (mongoose.models.Attendance as IAttendanceModel) || 
+// Instance method to check if currently checked in
+AttendanceSchema.methods.isCurrentlyCheckedIn = function(): boolean {
+  return this.checkIns.length > 0 && 
+         (this.checkOuts.length === 0 || 
+          this.checkOuts[this.checkOuts.length - 1].timestamp < 
+          this.checkIns[this.checkIns.length - 1].timestamp);
+};
+
+// Instance method to get current break
+AttendanceSchema.methods.getCurrentBreak = function(): IBreak | null {
+  const currentBreak = this.breaks.find((breakItem: IBreak) => 
+    breakItem.start && !breakItem.end
+  );
+  
+  return currentBreak || null;
+};
+
+const Attendance = (mongoose.models.Attendance as IAttendanceModel) || 
   mongoose.model<IAttendanceDocument, IAttendanceModel>('Attendance', AttendanceSchema);
 
-const Shift: IShiftModel = 
-  (mongoose.models.Shift as IShiftModel) || 
-  mongoose.model<IShiftDocument, IShiftModel>('Shift', ShiftSchema);
-
-const Break = mongoose.models.Break || mongoose.model<IBreakDocument>('Break', BreakSchema);
-const Task = mongoose.models.Task || mongoose.model<ITaskDocument>('Task', TaskSchema);
-const Holiday = mongoose.models.Holiday || mongoose.model<IHolidayDocument>('Holiday', HolidaySchema);
-const DayOff = mongoose.models.DayOff || mongoose.model<IDayOffDocument>('DayOff', DayOffSchema);
-const ShiftCalendar = mongoose.models.ShiftCalendar || mongoose.model<IShiftCalendarDocument>('ShiftCalendar', ShiftCalendarSchema);
-const ShiftSchedule = mongoose.models.ShiftSchedule || mongoose.model<IShiftScheduleDocument>('ShiftSchedule', ShiftScheduleSchema);
-const EmployeeShiftAssignment = mongoose.models.EmployeeShiftAssignment || mongoose.model<IEmployeeShiftAssignmentDocument>('EmployeeShiftAssignment', EmployeeShiftAssignmentSchema);
-
 export default Attendance;
-export { 
-  Shift, 
-  Break, 
-  Task, 
-  Holiday, 
-  DayOff, 
-  ShiftCalendar, 
-  ShiftSchedule, 
-  EmployeeShiftAssignment 
-};

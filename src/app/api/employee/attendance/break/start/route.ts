@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import connectToDatabase from '@/lib/db';
 import Attendance from '@/models/employee/Attendance';
-import { IBreakStartRequest, IAttendanceApiResponse } from '@/types/employee/attendance';
+import { IBreakRequest, IAttendanceApiResponse } from '@/types/employee/attendance';
 import { authOptions } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -17,34 +17,51 @@ export async function POST(request: NextRequest) {
     }
 
     await connectToDatabase();
-    const body: IBreakStartRequest = await request.json();
+    const body: IBreakRequest = await request.json();
     
-    const { breakType, reason, namazType } = body;
+    const { type, start } = body;
+    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    // Get today's attendance
-    const attendance = await Attendance.getTodayAttendance(session.user.id);
+    // Find today's attendance record
+    const attendance = await Attendance.findOne({
+      employeeId: session.user.id,
+      date: today
+    });
+
     if (!attendance) {
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: 'No check-in found for today'
-      }, { status: 400 });
+        message: 'No attendance record found for today. Please check in first.'
+      }, { status: 404 });
     }
 
-    if (attendance.checkOut) {
+    // Check if already on break
+    const currentBreak = attendance.breaks.find((b: any) => !b.end);
+    if (currentBreak) {
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: 'Already checked out, cannot start break'
+        message: 'You are already on a break. Please end your current break first.'
       }, { status: 400 });
     }
 
-    // Start break
-    const breakId = attendance.startBreak(breakType, namazType);
+    // Add break record
+    attendance.breaks.push({
+      type,
+      start: start ? new Date(start) : now,
+      isPaid: type === 'prayer' // Example: prayer breaks are paid
+    });
+
+    // Update status
+    attendance.status = 'on-break';
+
     await attendance.save();
 
-    return NextResponse.json<IAttendanceApiResponse<{ breakId: string }>>({
+    return NextResponse.json<IAttendanceApiResponse>({
       success: true,
       message: 'Break started successfully',
-      data: { breakId }
+      data: attendance
     });
 
   } catch (error) {

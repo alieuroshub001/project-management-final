@@ -1,9 +1,9 @@
-// app/api/employee/attendance/monthly/route.ts
+// app/api/employee/attendance/summary/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import connectToDatabase from '@/lib/db';
 import Attendance from '@/models/employee/Attendance';
-import { IAttendanceApiResponse, IAttendance } from '@/types/employee/attendance';
+import { IAttendanceApiResponse } from '@/types/employee/attendance';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
@@ -17,25 +17,32 @@ export async function GET(request: NextRequest) {
     }
 
     await connectToDatabase();
-
+    
     const { searchParams } = new URL(request.url);
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
-    const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
+    const startDateParam = searchParams.get('startDate');
+    const endDateParam = searchParams.get('endDate');
 
-    // Get monthly attendance
-    const attendanceRecords = await Attendance.getMonthlyAttendance(session.user.id, year, month);
+    const endDate = endDateParam ? new Date(endDateParam) : new Date();
+    const startDate = startDateParam ? new Date(startDateParam) : new Date();
+    startDate.setDate(startDate.getDate() - 30); // Default to last 30 days
 
-    return NextResponse.json<IAttendanceApiResponse<IAttendance[]>>({
+    const summary = await Attendance.getAttendanceSummary(
+      session.user.id,
+      startDate,
+      endDate
+    );
+
+    return NextResponse.json<IAttendanceApiResponse>({
       success: true,
-      message: 'Monthly attendance retrieved successfully',
-      data: attendanceRecords
+      message: 'Attendance summary retrieved successfully',
+      data: summary
     });
 
   } catch (error) {
-    console.error('Get monthly attendance error:', error);
+    console.error('Get attendance summary error:', error);
     return NextResponse.json<IAttendanceApiResponse>({
       success: false,
-      message: 'Failed to retrieve monthly attendance',
+      message: 'Failed to retrieve attendance summary',
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
