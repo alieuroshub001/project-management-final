@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import connectToDatabase from '@/lib/db';
+import User from '@/models/employee/User';
 import { TeamMember, ITeamMemberDocument } from '@/models/employee/Project/TeamMember';
 import { ProjectActivity } from '@/models/employee/Project/ProjectActivity';
 import Project from '@/models/employee/Project/Project';
@@ -137,14 +138,27 @@ export async function POST(
       }, { status: 403 });
     }
 
-    const body: ITeamMemberAddRequest = await request.json();
-    const { employeeId, role, permissions, hourlyRate } = body;
+    const body: ITeamMemberAddRequest & { 
+      employeeName?: string; 
+      employeeEmail?: string; 
+      employeeMobile?: string; 
+    } = await request.json();
+    
+    const { employeeId, role, permissions, hourlyRate, employeeName, employeeEmail, employeeMobile } = body;
 
     // Validate required fields
     if (!employeeId || !role || !permissions) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
         message: 'Missing required fields: employeeId, role, permissions'
+      }, { status: 400 });
+    }
+
+    // Validate permissions array
+    if (!Array.isArray(permissions) || permissions.length === 0) {
+      return NextResponse.json<IProjectApiResponse>({
+        success: false,
+        message: 'At least one permission is required'
       }, { status: 400 });
     }
 
@@ -162,13 +176,44 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // TODO: Fetch employee details from User model
-    // For now, we'll need these details passed in the request or fetched separately
-    const employeeDetails = {
-      name: 'Employee Name', // This should be fetched from User model
-      email: 'employee@example.com', // This should be fetched from User model
-      mobile: '1234567890' // This should be fetched from User model
+    let employeeDetails = {
+      name: employeeName || 'Unknown Employee',
+      email: employeeEmail || '',
+      mobile: employeeMobile || ''
     };
+
+    // If employee details weren't provided, fetch from User model
+    if (!employeeName || !employeeEmail) {
+      try {
+        const employee = await User.findById(employeeId).select('name email mobile');
+        
+        if (!employee) {
+          return NextResponse.json<IProjectApiResponse>({
+            success: false,
+            message: 'Employee not found'
+          }, { status: 404 });
+        }
+
+        if (!employee.emailVerified) {
+          return NextResponse.json<IProjectApiResponse>({
+            success: false,
+            message: 'Employee email is not verified'
+          }, { status: 400 });
+        }
+
+        employeeDetails = {
+          name: employee.name || 'Unknown Employee',
+          email: employee.email || '',
+          mobile: employee.mobile || ''
+        };
+      } catch (userError) {
+        console.error('Error fetching employee details:', userError);
+        return NextResponse.json<IProjectApiResponse>({
+          success: false,
+          message: 'Failed to fetch employee details'
+        }, { status: 500 });
+      }
+    }
 
     const teamMemberData = {
       projectId: params.id,

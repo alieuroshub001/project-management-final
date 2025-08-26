@@ -1,8 +1,10 @@
-// components/Employee/Projects/ProjectTasks.tsx
+// components/Employee/Projects/ProjectTasks.tsx (Updated with Modal Integration)
 "use client";
 import { useState, useEffect } from 'react';
-import { ITask, IProjectApiResponse } from '@/types/employee/projectmanagement';
+import { ITask, IProjectApiResponse, ITeamMember } from '@/types/employee/projectmanagement';
 import { formatDate } from '@/utils/dateUtils';
+import TaskCreateModal from './TaskCreationModal';
+import TaskDetailsModal from './TaskDetailModal';
 import {
   CheckSquare,
   Plus,
@@ -14,29 +16,38 @@ import {
   CheckCircle,
   PlayCircle,
   PauseCircle,
-  XCircle
+  XCircle,
+  Eye
 } from 'lucide-react';
 
 interface ProjectTasksProps {
   projectId: string;
-  tasks: ITask[];
+  tasks?: ITask[];
+  teamMembers?: ITeamMember[];
   onRefresh: () => void;
 }
 
-export default function ProjectTasks({ projectId, tasks, onRefresh }: ProjectTasksProps) {
-  const [filteredTasks, setFilteredTasks] = useState<ITask[]>(tasks);
+export default function ProjectTasks({ 
+  projectId, 
+  tasks = [], 
+  teamMembers = [], 
+  onRefresh 
+}: ProjectTasksProps) {
+  const [filteredTasks, setFilteredTasks] = useState<ITask[]>(tasks || []);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   useEffect(() => {
-    let filtered = tasks;
+    const safeTasks = tasks || [];
+    let filtered = safeTasks;
 
     if (searchQuery) {
       filtered = filtered.filter(task => 
-        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.description.toLowerCase().includes(searchQuery.toLowerCase())
+        task.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.description?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -98,6 +109,20 @@ export default function ProjectTasks({ projectId, tasks, onRefresh }: ProjectTas
     return new Date(task.dueDate) < new Date();
   };
 
+  const handleTaskClick = (taskId: string) => {
+    setSelectedTaskId(taskId);
+  };
+
+  const handleCreateSuccess = () => {
+    setShowCreateModal(false);
+    onRefresh();
+  };
+
+  const handleTaskUpdateSuccess = () => {
+    setSelectedTaskId(null);
+    onRefresh();
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with Actions */}
@@ -105,7 +130,7 @@ export default function ProjectTasks({ projectId, tasks, onRefresh }: ProjectTas
         <div>
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Project Tasks</h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            {filteredTasks.length} of {tasks.length} tasks
+            {filteredTasks.length} of {(tasks || []).length} tasks
           </p>
         </div>
         
@@ -175,9 +200,12 @@ export default function ProjectTasks({ projectId, tasks, onRefresh }: ProjectTas
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white truncate">
+                      <button
+                        onClick={() => handleTaskClick(task.id)}
+                        className="text-lg font-medium text-gray-900 dark:text-white truncate hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      >
                         {task.title}
-                      </h3>
+                      </button>
                       
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
                         <StatusIcon className="w-3 h-3 mr-1" />
@@ -225,6 +253,16 @@ export default function ProjectTasks({ projectId, tasks, onRefresh }: ProjectTas
                       </div>
                     </div>
                   </div>
+                  
+                  <div className="flex items-center space-x-2 ml-4">
+                    <button
+                      onClick={() => handleTaskClick(task.id)}
+                      className="flex items-center px-3 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      View
+                    </button>
+                  </div>
                 </div>
                 
                 {/* Progress Bar */}
@@ -250,7 +288,10 @@ export default function ProjectTasks({ projectId, tasks, onRefresh }: ProjectTas
                       <span className="text-gray-600 dark:text-gray-400">
                         Checklist: {task.checklist.filter(item => item.isCompleted).length}/{task.checklist.length} completed
                       </span>
-                      <button className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300">
+                      <button 
+                        onClick={() => handleTaskClick(task.id)}
+                        className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                      >
                         View Details
                       </button>
                     </div>
@@ -280,24 +321,25 @@ export default function ProjectTasks({ projectId, tasks, onRefresh }: ProjectTas
         )}
       </div>
 
-      {/* Task Creation Modal would go here */}
+      {/* Modals */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white dark:bg-gray-800">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Create New Task</h3>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-            <p className="text-gray-600 dark:text-gray-400 p-8 text-center">
-              Task creation form would be implemented here
-            </p>
-          </div>
-        </div>
+        <TaskCreateModal
+          projectId={projectId}
+          teamMembers={teamMembers || []}
+          existingTasks={tasks || []}
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={handleCreateSuccess}
+        />
+      )}
+
+      {selectedTaskId && (
+        <TaskDetailsModal
+          projectId={projectId}
+          taskId={selectedTaskId}
+          teamMembers={teamMembers || []}
+          onClose={() => setSelectedTaskId(null)}
+          onSuccess={handleTaskUpdateSuccess}
+        />
       )}
     </div>
   );
