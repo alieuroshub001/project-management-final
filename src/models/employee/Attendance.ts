@@ -1,486 +1,480 @@
-// models/employee/Attendance.ts
-import mongoose, { Schema, Model, Document, Types } from 'mongoose';
-import { 
-  IAttendance, 
-  ICheckIn, 
-  ICheckOut, 
-  IBreak, 
-  ITask,
-  ShiftType,
-  AttendanceStatus,
-  BreakType,
-  TaskPriority
-} from '@/types/employee/attendance';
+// types/employee-attendance.ts - Employee-focused attendance management types
 
-// Define the document interface that extends mongoose Document
-export interface IAttendanceDocument extends Document {
-  employeeId: Types.ObjectId;
-  employeeName: string;
-  employeeEmail: string;
-  employeeMobile: string;
-  date: Date;
-  shift: ShiftType;
-  scheduledStart: Date;
-  scheduledEnd: Date;
-  checkIns: Types.Array<ICheckIn>;
-  checkOuts: Types.Array<ICheckOut>;
-  breaks: Types.Array<IBreak>;
-  totalHours: number;
-  regularHours: number;
-  overtimeHours: number;
-  breakHours: number;
-  status: AttendanceStatus;
-  lateMinutes: number;
-  earlyDepartureMinutes: number;
-  tasks: Types.Array<ITask>;
-  notes?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  
-  // Instance methods
-  calculateTotalHours(): number;
-  isCurrentlyCheckedIn(): boolean;
-  getCurrentBreak(): IBreak | null;
+export type AttendanceStatus = 
+  | 'present' 
+  | 'absent' 
+  | 'late' 
+  | 'half-day' 
+  | 'on-leave' 
+  | 'remote' 
+  | 'early-departure';
+
+export type ShiftType = 
+  | 'morning'   // 8:00 AM - 4:00 PM
+  | 'evening'   // 4:00 PM - 12:00 AM
+  | 'night';    // 12:00 AM - 8:00 AM
+
+export type BreakType = 
+  | 'break' 
+  | 'meal' 
+  | 'tea' 
+  | 'personal' 
+  | 'other';
+
+export type NamazType = 
+  | 'fajr' 
+  | 'dhuhr' 
+  | 'asr' 
+  | 'maghrib' 
+  | 'isha'
+  | 'jumma';
+
+export type TaskCategory = 
+  | 'development' 
+  | 'design' 
+  | 'testing' 
+  | 'meeting' 
+  | 'documentation' 
+  | 'research' 
+  | 'support'
+  | 'training'
+  | 'other';
+
+export type TaskPriority = 
+  | 'low' 
+  | 'medium' 
+  | 'high' 
+  | 'urgent';
+
+export type TaskStatus = 
+  | 'completed' 
+  | 'in-progress'
+  | 'paused';
+
+// Predefined Shift Configurations
+export const SHIFT_CONFIGS = {
+  morning: {
+    name: 'Morning Shift',
+    type: 'morning' as ShiftType,
+    startTime: '08:00',
+    endTime: '16:00',
+    requiredHours: 8,
+    allowedBreakTime: 60, // 1 hour
+    allowedNamazTime: 90, // 1.5 hours
+    lateThresholdMinutes: 15, // Can check in up to 15 minutes late
+    earlyCheckoutThresholdMinutes: 10 // Need reason if checking out 10+ minutes early
+  },
+  evening: {
+    name: 'Evening Shift',
+    type: 'evening' as ShiftType,
+    startTime: '16:00',
+    endTime: '00:00',
+    requiredHours: 8,
+    allowedBreakTime: 60, // 1 hour
+    allowedNamazTime: 90, // 1.5 hours
+    lateThresholdMinutes: 15,
+    earlyCheckoutThresholdMinutes: 10
+  },
+  night: {
+    name: 'Night Shift',
+    type: 'night' as ShiftType,
+    startTime: '00:00',
+    endTime: '08:00',
+    requiredHours: 8,
+    allowedBreakTime: 60, // 1 hour
+    allowedNamazTime: 90, // 1.5 hours
+    lateThresholdMinutes: 15,
+    earlyCheckoutThresholdMinutes: 10
+  }
+} as const;
+
+// Basic Shift Information
+export interface IShiftInfo {
+  name: string;
+  type: ShiftType;
+  startTime: string; // HH:MM format (24-hour)
+  endTime: string; // HH:MM format (24-hour)
+  requiredHours: number; // Required working hours
+  allowedBreakTime: number; // Total allowed break time in minutes
+  allowedNamazTime: number; // Total allowed namaz time in minutes
+  lateThresholdMinutes: number; // Maximum minutes late without reason
+  earlyCheckoutThresholdMinutes: number; // Minutes before end time requiring reason
 }
 
-// Define the check-in subdocument interface
-export interface ICheckInDocument extends Document {
-  timestamp: Date;
-  location?: {
-    latitude: number;
-    longitude: number;
-    accuracy?: number;
-    address?: string;
-  };
-  isLate: boolean;
-  lateMinutes: number;
-  deviceInfo?: string;
-  imageCapture?: string;
-}
-
-// Define the check-out subdocument interface
-export interface ICheckOutDocument extends Document {
-  timestamp: Date;
-  location?: {
-    latitude: number;
-    longitude: number;
-    accuracy?: number;
-    address?: string;
-  };
-  isEarly: boolean;
-  earlyMinutes: number;
-  tasksCompleted: boolean;
-  deviceInfo?: string;
-  imageCapture?: string;
-}
-
-// Define the break subdocument interface
-export interface IBreakDocument extends Document {
+// Break Interface
+export interface IBreak {
+  id?: string;
   type: BreakType;
   start: Date;
   end?: Date;
-  duration?: number;
-  isPaid: boolean;
+  duration?: number; // in minutes
+  notes?: string;
+  createdAt: Date;
 }
 
-// Define the task subdocument interface
-export interface ITaskDocument extends Document {
-  description: string;
-  timeAllocated: number;
-  timeSpent: number;
-  completed: boolean;
+// Namaz Interface
+export interface INamaz {
+  id?: string;
+  type: NamazType;
+  start: Date;
+  end?: Date;
+  duration?: number; // in minutes
+  notes?: string;
+  createdAt: Date;
+}
+
+// Self-Added Task Interface
+export interface ITaskCompleted {
+  id?: string;
+  title: string;
+  description?: string;
+  category: TaskCategory;
   priority: TaskPriority;
+  status: TaskStatus;
+  hoursSpent: number;
+  startTime?: Date;
+  endTime?: Date;
+  notes?: string;
+  progressPercentage?: number; // 0-100 for in-progress tasks
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Define static methods interface
-interface IAttendanceModel extends Model<IAttendanceDocument> {
-  findByEmployee(employeeId: string, startDate?: Date, endDate?: Date): Promise<IAttendanceDocument[]>;
-  findByDate(date: Date): Promise<IAttendanceDocument[]>;
-  findCurrentAttendance(employeeId: string): Promise<IAttendanceDocument | null>;
-  getAttendanceSummary(employeeId: string, startDate: Date, endDate: Date): Promise<any>;
+// Employee Attendance Summary
+export interface IAttendanceSummary {
+  totalWorkingTime: number; // in minutes
+  totalBreakTime: number; // in minutes
+  totalNamazTime: number; // in minutes
+  totalTaskHours: number;
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  productivityScore: number; // 0-100 based on task completion
+  timeUtilization: number; // Percentage of time spent on tasks
 }
 
-// CheckIn Subdocument Schema
-const CheckInSchema: Schema = new Schema({
-  timestamp: { 
-    type: Date, 
-    required: true,
-    default: Date.now
-  },
-  location: {
-    latitude: { type: Number },
-    longitude: { type: Number },
-    accuracy: { type: Number },
-    address: { type: String }
-  },
-  isLate: { 
-    type: Boolean, 
-    default: false 
-  },
-  lateMinutes: { 
-    type: Number, 
-    default: 0,
-    min: 0
-  },
-  deviceInfo: { type: String },
-  imageCapture: { type: String } // URL to check-in image
-});
-
-// CheckOut Subdocument Schema
-const CheckOutSchema: Schema = new Schema({
-  timestamp: { 
-    type: Date, 
-    required: true,
-    default: Date.now
-  },
-  location: {
-    latitude: { type: Number },
-    longitude: { type: Number },
-    accuracy: { type: Number },
-    address: { type: String }
-  },
-  isEarly: { 
-    type: Boolean, 
-    default: false 
-  },
-  earlyMinutes: { 
-    type: Number, 
-    default: 0,
-    min: 0
-  },
-  tasksCompleted: { 
-    type: Boolean, 
-    default: false 
-  },
-  deviceInfo: { type: String },
-  imageCapture: { type: String } // URL to check-out image
-});
-
-// Break Subdocument Schema
-const BreakSchema: Schema = new Schema({
-  type: { 
-    type: String, 
-    enum: ['lunch', 'tea', 'rest', 'prayer', 'personal', 'emergency'],
-    required: true 
-  },
-  start: { 
-    type: Date, 
-    required: true,
-    default: Date.now
-  },
-  end: { type: Date },
-  duration: { 
-    type: Number, 
-    min: 0 
-  }, // in minutes
-  isPaid: { 
-    type: Boolean, 
-    default: false 
-  }
-});
-
-// Task Subdocument Schema
-const TaskSchema: Schema = new Schema({
-  description: { 
-    type: String, 
-    required: true,
-    maxlength: 500
-  },
-  timeAllocated: { 
-    type: Number, 
-    required: true,
-    min: 1,
-    max: 480 // 8 hours in minutes
-  },
-  timeSpent: { 
-    type: Number, 
-    default: 0,
-    min: 0
-  },
-  completed: { 
-    type: Boolean, 
-    default: false 
-  },
-  priority: { 
-    type: String, 
-    enum: ['low', 'medium', 'high', 'critical'],
-    default: 'medium'
-  },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
-  },
-  updatedAt: { 
-    type: Date, 
-    default: Date.now 
-  }
-});
-
-// Main Attendance Schema
-const AttendanceSchema: Schema<IAttendanceDocument> = new Schema({
-  employeeId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
-  },
-  employeeName: { 
-    type: String, 
-    required: true 
-  },
-  employeeEmail: { 
-    type: String, 
-    required: true 
-  },
-  employeeMobile: { 
-    type: String, 
-    required: true 
-  },
-  date: { 
-    type: Date, 
-    required: true,
-    index: true
-  },
-  shift: { 
-    type: String, 
-    enum: ['morning', 'evening', 'night', 'custom'],
-    required: true 
-  },
-  scheduledStart: { 
-    type: Date, 
-    required: true 
-  },
-  scheduledEnd: { 
-    type: Date, 
-    required: true 
-  },
-  checkIns: [CheckInSchema],
-  checkOuts: [CheckOutSchema],
-  breaks: [BreakSchema],
-  totalHours: { 
-    type: Number, 
-    default: 0,
-    min: 0,
-    max: 24
-  },
-  regularHours: { 
-    type: Number, 
-    default: 0,
-    min: 0,
-    max: 24
-  },
-  overtimeHours: { 
-    type: Number, 
-    default: 0,
-    min: 0
-  },
-  breakHours: { 
-    type: Number, 
-    default: 0,
-    min: 0
-  },
-  status: { 
-    type: String, 
-    enum: [
-      'present', 'absent', 'late', 'half-day', 'early-departure', 
-      'on-break', 'holiday', 'weekend', 'leave'
-    ],
-    default: 'absent'
-  },
-  lateMinutes: { 
-    type: Number, 
-    default: 0,
-    min: 0
-  },
-  earlyDepartureMinutes: { 
-    type: Number, 
-    default: 0,
-    min: 0
-  },
-  tasks: [TaskSchema],
-  notes: { 
-    type: String,
-    maxlength: 1000
-  },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
-  },
-  updatedAt: { 
-    type: Date, 
-    default: Date.now 
-  }
-});
-
-// Indexes for better query performance
-AttendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true });
-AttendanceSchema.index({ date: 1, status: 1 });
-AttendanceSchema.index({ employeeId: 1, createdAt: -1 });
-AttendanceSchema.index({ status: 1 });
-
-// Pre-save middleware to update timestamps and calculate hours
-AttendanceSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
+// Main Employee Attendance Record
+export interface IEmployeeAttendanceRecord {
+  id?: string;
+  employeeId: string;
+  date: Date;
+  shift: IShiftInfo;
   
-  // Calculate total hours if we have check-ins and check-outs
-  if (this.checkIns.length > 0 && this.checkOuts.length > 0) {
-    const lastCheckOut = this.checkOuts[this.checkOuts.length - 1].timestamp;
-    const firstCheckIn = this.checkIns[0].timestamp;
-    const totalMs = lastCheckOut.getTime() - firstCheckIn.getTime();
-    this.totalHours = parseFloat((totalMs / (1000 * 60 * 60)).toFixed(2));
-    
-    // Calculate break hours
-    this.breakHours = this.breaks.reduce((total, breakItem) => {
-      if (breakItem.end) {
-        const breakMs = breakItem.end.getTime() - breakItem.start.getTime();
-        return total + (breakMs / (1000 * 60 * 60));
-      }
-      return total;
-    }, 0);
-    
-    // Calculate regular hours (total hours minus breaks)
-    this.regularHours = parseFloat((this.totalHours - this.breakHours).toFixed(2));
-    
-    // Calculate overtime (anything over 8 regular hours)
-    this.overtimeHours = Math.max(0, this.regularHours - 8);
-  }
+  // Check-in/out data
+  checkIn?: Date;
+  checkOut?: Date;
+  checkInReason?: string; // Required if more than 15 minutes late
+  checkOutReason?: string; // Required if checking out 10+ minutes early
   
-  next();
-});
-
-// Pre-save middleware for breaks to calculate duration
-BreakSchema.pre('save', function(next) {
-  if (this.end && this.isModified('end')) {
-    const durationMs = this.end.getTime() - this.start.getTime();
-    this.duration = parseFloat((durationMs / (1000 * 60)).toFixed(2)); // in minutes
-  }
-  next();
-});
-
-// Pre-save middleware for tasks to update timestamp
-TaskSchema.pre('save', function(next) {
-  if (this.isModified()) {
-    this.updatedAt = new Date();
-  }
-  next();
-});
-
-// Virtual for checking if attendance is active (currently checked in)
-AttendanceSchema.virtual('isActive').get(function() {
-  return this.checkIns.length > 0 && 
-         (this.checkOuts.length === 0 || 
-          this.checkOuts[this.checkOuts.length - 1].timestamp < 
-          this.checkIns[this.checkIns.length - 1].timestamp);
-});
-
-// Virtual for current check-in status
-AttendanceSchema.virtual('currentCheckIn').get(function() {
-  if (this.checkIns.length > 0) {
-    return this.checkIns[this.checkIns.length - 1];
-  }
-  return null;
-});
-
-// Static method to find attendance by employee
-AttendanceSchema.statics.findByEmployee = function(
-  employeeId: string, 
-  startDate?: Date, 
-  endDate?: Date
-): Promise<IAttendanceDocument[]> {
-  let query: any = { employeeId };
+  // Status
+  status: AttendanceStatus;
+  isLate: boolean;
+  isEarlyDeparture: boolean;
+  isRemote: boolean;
+  isHalfDay: boolean;
   
-  if (startDate && endDate) {
-    query.date = { $gte: startDate, $lte: endDate };
-  } else if (startDate) {
-    query.date = { $gte: startDate };
-  } else if (endDate) {
-    query.date = { $lte: endDate };
-  }
+  // Employee Activities
+  breaks: IBreak[];
+  namaz: INamaz[];
+  tasksCompleted: ITaskCompleted[];
   
-  return this.find(query).sort({ date: -1 });
-};
+  // Time calculations (auto-calculated)
+  totalBreakMinutes: number;
+  totalNamazMinutes: number;
+  totalWorkingMinutes: number;
+  actualWorkingMinutes: number; // Excluding breaks and namaz
+  lateMinutes: number;
+  earlyDepartureMinutes: number;
+  
+  // Summary
+  summary: IAttendanceSummary;
+  dailyNotes?: string; // Employee's daily notes
+  
+  // Status flags (read-only for employee)
+  isApproved: boolean;
+  rejectionReason?: string;
+  
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-// Static method to find attendance by date
-AttendanceSchema.statics.findByDate = function(date: Date): Promise<IAttendanceDocument[]> {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-  
-  return this.find({ 
-    date: { $gte: startOfDay, $lte: endOfDay } 
-  });
-};
+// Calendar View Types for Employee
+export type CalendarViewType = 'month' | 'week' | 'day';
 
-// Static method to find current attendance (today's record)
-AttendanceSchema.statics.findCurrentAttendance = function(employeeId: string): Promise<IAttendanceDocument | null> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  return this.findOne({ 
-    employeeId, 
-    date: today 
-  });
-};
+export interface IEmployeeCalendarDay {
+  date: Date;
+  attendance?: IEmployeeAttendanceRecord;
+  isWorkingDay: boolean;
+  isWeekend: boolean;
+  isHoliday: boolean;
+  holidayName?: string;
+  shift?: IShiftInfo;
+  hasLeave?: boolean;
+  leaveType?: string;
+  status: AttendanceStatus | 'no-record';
+}
 
-// Static method to get attendance summary
-AttendanceSchema.statics.getAttendanceSummary = async function(
-  employeeId: string, 
-  startDate: Date, 
-  endDate: Date
-): Promise<any> {
-  const attendances = await this.findByEmployee(employeeId, startDate, endDate);
-  
-  const summary = {
-    totalDays: attendances.length,
-    presentDays: attendances.filter((a: { status: string; }) => a.status === 'present').length,
-    absentDays: attendances.filter((a: { status: string; }) => a.status === 'absent').length,
-    lateDays: attendances.filter((a: { lateMinutes: number; }) => a.lateMinutes > 0).length,
-    earlyDepartureDays: attendances.filter((a: { earlyDepartureMinutes: number; }) => a.earlyDepartureMinutes > 0).length,
-    totalRegularHours: attendances.reduce((sum: any, a: { regularHours: any; }) => sum + a.regularHours, 0),
-    totalOvertimeHours: attendances.reduce((sum: any, a: { overtimeHours: any; }) => sum + a.overtimeHours, 0),
-    averageHoursPerDay: attendances.length > 0 ? 
-      parseFloat((attendances.reduce((sum: any, a: { regularHours: any; }) => sum + a.regularHours, 0) / attendances.length).toFixed(2)) : 0,
-    attendanceRate: attendances.length > 0 ? 
-      parseFloat(((attendances.filter((a: { status: string; }) => a.status === 'present').length / attendances.length) * 100).toFixed(2)) : 0
+export interface IEmployeeCalendarWeek {
+  weekNumber: number;
+  startDate: Date;
+  endDate: Date;
+  days: IEmployeeCalendarDay[];
+  weeklyStats: {
+    totalDays: number;
+    presentDays: number;
+    absentDays: number;
+    lateDays: number;
+    totalHours: number;
+    averageHours: number;
+    totalTasks: number;
   };
+}
+
+export interface IEmployeeCalendarMonth {
+  month: number;
+  year: number;
+  monthName: string;
+  weeks: IEmployeeCalendarWeek[];
+  monthlyStats: {
+    totalWorkingDays: number;
+    presentDays: number;
+    absentDays: number;
+    lateDays: number;
+    totalHours: number;
+    averageHours: number;
+    attendancePercentage: number;
+    punctualityPercentage: number;
+    totalTasks: number;
+    completedTasks: number;
+    productivityScore: number;
+  };
+}
+
+// Employee Dashboard Stats
+export interface IEmployeeAttendanceStats {
+  today: {
+    status: AttendanceStatus | 'not-checked-in';
+    checkIn?: Date;
+    currentWorkingTime: number; // in minutes
+    totalBreaks: number;
+    totalNamaz: number;
+    tasksCompleted: number;
+    isOnBreak: boolean;
+    currentBreakType?: BreakType | NamazType;
+  };
+  thisWeek: {
+    totalDays: number;
+    presentDays: number;
+    totalHours: number;
+    averageHours: number;
+    totalTasks: number;
+    punctualityRate: number;
+  };
+  thisMonth: {
+    totalWorkingDays: number;
+    presentDays: number;
+    totalHours: number;
+    attendanceRate: number;
+    totalTasks: number;
+    productivityScore: number;
+  };
+}
+
+// Current Session Interface (for active tracking)
+export interface ICurrentSession {
+  recordId: string;
+  checkIn: Date;
+  currentStatus: 'working' | 'on-break' | 'namaz';
+  currentBreak?: {
+    type: BreakType | NamazType;
+    start: Date;
+  };
+  elapsedWorkingTime: number; // in minutes
+  elapsedBreakTime: number; // in minutes
+  elapsedNamazTime: number; // in minutes
+  todaysTasks: ITaskCompleted[];
+  canCheckOut: boolean;
+  warnings: string[]; // e.g., "Break time exceeding limit"
+}
+
+// Forms and Input Types
+export interface ICheckInForm {
+  reason?: string; // Required if checking in more than 15 minutes late
+  isRemote: boolean;
+  notes?: string;
+}
+
+export interface ICheckOutForm {
+  reason?: string; // Required if checking out 10+ minutes before shift end
+  dailySummary?: string;
+  completedTasks?: number;
+}
+
+export interface IBreakForm {
+  type: BreakType;
+  notes?: string;
+}
+
+export interface INamazForm {
+  type: NamazType;
+  notes?: string;
+}
+
+export interface ITaskForm {
+  title: string;
+  description?: string;
+  category: TaskCategory;
+  priority: TaskPriority;
+  hoursSpent: number;
+  startTime?: Date;
+  endTime?: Date;
+  notes?: string;
+  status?: TaskStatus;
+}
+
+// Filter Options for Employee View
+export interface IEmployeeAttendanceFilters {
+  dateFrom?: Date;
+  dateTo?: Date;
+  status?: AttendanceStatus[];
+  isApproved?: boolean;
+}
+
+// Employee Notifications
+export interface IEmployeeNotification {
+  id?: string;
+  type: 'reminder' | 'approval' | 'rejection' | 'warning';
+  title: string;
+  message: string;
+  isRead: boolean;
+  actionRequired?: boolean;
+  relatedRecordId?: string;
+  createdAt: Date;
+}
+
+// Quick Actions for Employee
+export interface IQuickActions {
+  canCheckIn: boolean;
+  canCheckOut: boolean;
+  canStartBreak: boolean;
+  canEndBreak: boolean;
+  canStartNamaz: boolean;
+  canEndNamaz: boolean;
+  isOnBreak: boolean;
+  isInNamaz: boolean;
+  breakTimeRemaining?: number; // in minutes
+  namazTimeRemaining?: number; // in minutes
+  isLateCheckIn?: boolean;
+  requiresCheckInReason?: boolean;
+  requiresCheckOutReason?: boolean;
+}
+
+// Employee Settings (limited configuration)
+export interface IEmployeeAttendancePreferences {
+  id?: string;
+  employeeId: string;
   
-  return summary;
-};
-
-// Instance method to calculate total hours
-AttendanceSchema.methods.calculateTotalHours = function(): number {
-  if (this.checkIns.length === 0 || this.checkOuts.length === 0) {
-    return 0;
-  }
+  // Notification preferences
+  enableReminders: boolean;
+  checkInReminder: boolean;
+  checkOutReminder: boolean;
+  breakReminder: boolean;
   
-  const lastCheckOut = this.checkOuts[this.checkOuts.length - 1].timestamp;
-  const firstCheckIn = this.checkIns[0].timestamp;
-  const totalMs = lastCheckOut.getTime() - firstCheckIn.getTime();
+  // Display preferences
+  defaultCalendarView: CalendarViewType;
+  showProductivityScore: boolean;
+  showTaskTimer: boolean;
   
-  return parseFloat((totalMs / (1000 * 60 * 60)).toFixed(2));
-};
-
-// Instance method to check if currently checked in
-AttendanceSchema.methods.isCurrentlyCheckedIn = function(): boolean {
-  return this.checkIns.length > 0 && 
-         (this.checkOuts.length === 0 || 
-          this.checkOuts[this.checkOuts.length - 1].timestamp < 
-          this.checkIns[this.checkIns.length - 1].timestamp);
-};
-
-// Instance method to get current break
-AttendanceSchema.methods.getCurrentBreak = function(): IBreak | null {
-  const currentBreak = this.breaks.find((breakItem: IBreak) => 
-    breakItem.start && !breakItem.end
-  );
+  // Time preferences
+  timeFormat: '12h' | '24h';
+  timezone: string;
   
-  return currentBreak || null;
-};
+  updatedAt: Date;
+}
 
-const Attendance = (mongoose.models.Attendance as IAttendanceModel) || 
-  mongoose.model<IAttendanceDocument, IAttendanceModel>('Attendance', AttendanceSchema);
+// API Response Types
+export interface IEmployeeAttendanceResponse<T = unknown> {
+  success: boolean;
+  message: string;
+  data?: T;
+  error?: string;
+}
 
-export default Attendance;
+// Real-time Status Update
+export interface IEmployeeStatusUpdate {
+  type: 'check-in' | 'check-out' | 'break-start' | 'break-end' | 'namaz-start' | 'namaz-end' | 'task-added';
+  timestamp: Date;
+  data: {
+    currentStatus: 'working' | 'on-break' | 'namaz' | 'checked-out';
+    workingTime: number;
+    breakTime: number;
+    namazTime: number;
+    tasksCount: number;
+  };
+}
+
+// Time Tracking Utilities
+export interface ITimeCalculations {
+  totalMinutes: number;
+  hours: number;
+  minutes: number;
+  formatted: string; // "8h 30m"
+}
+
+// Task Statistics
+export interface ITaskStats {
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  totalHours: number;
+  averageHoursPerTask: number;
+  categoryBreakdown: Array<{
+    category: TaskCategory;
+    count: number;
+    hours: number;
+  }>;
+  priorityBreakdown: Array<{
+    priority: TaskPriority;
+    count: number;
+    hours: number;
+  }>;
+}
+
+// Weekly/Monthly Reports for Employee
+export interface IEmployeeAttendanceReport {
+  period: 'week' | 'month';
+  startDate: Date;
+  endDate: Date;
+  totalWorkingDays: number;
+  presentDays: number;
+  totalHours: number;
+  averageDailyHours: number;
+  punctualityRate: number;
+  attendanceRate: number;
+  totalTasks: number;
+  productivityScore: number;
+  topCategories: Array<{
+    category: TaskCategory;
+    hours: number;
+    percentage: number;
+  }>;
+  dailyBreakdown: Array<{
+    date: Date;
+    status: AttendanceStatus;
+    hours: number;
+    tasks: number;
+  }>;
+}
+
+// Utility functions for shift management
+export interface IShiftValidation {
+  isLateCheckIn: boolean;
+  lateMinutes: number;
+  requiresReason: boolean;
+  isEarlyCheckOut: boolean;
+  earlyMinutes: number;
+  canCheckIn: boolean;
+  canCheckOut: boolean;
+  message: string;
+}
+

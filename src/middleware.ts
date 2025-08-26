@@ -2,7 +2,7 @@
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 
-const authRoutes = ['/employee/auth/login', '/employee/auth/signup', '/employee/auth/forgot-password'];
+const authRoutes = ['/auth/employee/login', '/auth/employee/signup', '/auth/employee/forgot-password'];
 const protectedRoutes = ['/employee', '/employee/dashboard', '/api/employee'];
 const nextAuthApiRoutes = ['/employee/auth/:path*'];
 
@@ -37,7 +37,7 @@ export async function middleware(request: NextRequest) {
 
   // Protect routes that require authentication
   if (isProtectedRoute && !token) {
-    return NextResponse.redirect(new URL('/employee/auth/login', request.url));
+    return NextResponse.redirect(new URL('/auth/employee/login', request.url));
   }
 
   return NextResponse.next();
@@ -48,9 +48,9 @@ export const config = {
     '/employee/:path*',
     '/employee/dashboard/:path*',
     '/api/employee/:path*',
-    '/employee/auth/login',
-    '/employee/auth/signup',
-    '/employee/auth/forgot-password',
+    '/auth/employee/login',
+    '/auth/employee/signup',
+    '/auth/employee/forgot-password',
     '/api/employee/auth/:path*' // Add your custom NextAuth API routes
   ],
 };
