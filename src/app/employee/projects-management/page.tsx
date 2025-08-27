@@ -2,7 +2,7 @@
 "use client";
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import ProjectModule from '@/components/Employee/Projects/ProjectModule';
+import ProjectModule from '@/components/Projects/ProjectModule';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 function ProjectsPageContent() {

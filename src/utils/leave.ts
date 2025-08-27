@@ -1,6 +1,6 @@
 // utils/leave.ts
-import { ILeaveDocument } from '@/models/employee/Leave';
-import { ILeave, LeaveType, LeaveStatus } from '@/types/employee/leave';
+import { ILeaveDocument } from '@/models/Leave';
+import { ILeave, LeaveType, LeaveStatus } from '@/types/leave';
 
 /**
  * Converts a Mongoose Leave document to ILeave interface

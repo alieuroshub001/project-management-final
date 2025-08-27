@@ -1,4 +1,4 @@
-import ForgotPasswordForm from '@/components/Employee/auth/ForgotPassword';
+import ForgotPasswordForm from '@/components/Auth/ForgotPassword';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';

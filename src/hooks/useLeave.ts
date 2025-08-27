@@ -1,6 +1,6 @@
 // hooks/useLeave.ts
 import { useState, useEffect } from 'react';
-import { ILeave, ILeaveBalance } from '@/types/employee/leave';
+import { ILeave, ILeaveBalance } from '@/types/leave';
 
 export const useLeave = () => {
   const [leaves, setLeaves] = useState<ILeave[]>([]);

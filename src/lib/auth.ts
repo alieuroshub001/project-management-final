@@ -1,13 +1,13 @@
 // lib/auth.ts
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { IOTP, ISessionUser } from '@/types/employee';
+import { IOTP, ISessionUser } from '@/types';
 import { sendOTPEmail } from './email';
 import NextAuth, { SessionStrategy, User as NextAuthUser, Session, Account, Profile, AuthOptions } from 'next-auth';
 import { JWT } from 'next-auth/jwt';
 import { AdapterUser } from 'next-auth/adapters';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import User from '@/models/employee/User';
+import User from '@/models/User';
 import connectToDatabase from './db';
 
 // Extended user type for NextAuth - must match your types
@@ -46,7 +46,7 @@ export async function createOTPRecord(
   email: string,
   type: IOTP['type']
 ): Promise<string> {
-  const OTP = (await import('@/models/employee/OTP')).default;
+  const OTP = (await import('@/models/OTP')).default;
   const otp = generateOTP();
  
   await OTP.findOneAndUpdate(
@@ -65,7 +65,7 @@ export async function verifyOTP(
   otp: string,
   type: IOTP['type']
 ): Promise<boolean> {
-  const OTP = (await import('@/models/employee/OTP')).default;
+  const OTP = (await import('@/models/OTP')).default;
   const record = await OTP.findOne({ email, otp, type });
  
   if (!record || record.expiresAt < new Date()) {

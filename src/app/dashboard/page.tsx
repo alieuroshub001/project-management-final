@@ -1,8 +1,8 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import LogoutButton from '@/components/Employee/auth/LogoutButton';
-import DeleteAccountButton from '@/components/Employee/auth/DeleteAccountButton';
+import LogoutButton from '@/components/Auth/LogoutButton';
+import DeleteAccountButton from '@/components/Auth/DeleteAccountButton';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);

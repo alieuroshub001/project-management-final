@@ -2,7 +2,7 @@
 "use client";
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import LeaveModule from '@/components/Employee/Leave/LeaveModule';
+import LeaveModule from '@/components/Leave/LeaveModule';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 function LeavePageContent() {

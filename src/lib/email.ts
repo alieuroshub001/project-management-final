@@ -1,6 +1,6 @@
 // lib/email.ts
 import nodemailer from 'nodemailer';
-import { IApiResponse } from '@/types/employee';
+import { IApiResponse } from '@/types';
 
 // Configure email transporter
 const transporter = nodemailer.createTransport({

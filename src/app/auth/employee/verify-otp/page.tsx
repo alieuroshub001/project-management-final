@@ -1,4 +1,4 @@
-import VerifyOTPForm from '@/components/Employee/auth/VerifyOTP';
+import VerifyOTPForm from '@/components/Auth/VerifyOTP';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';

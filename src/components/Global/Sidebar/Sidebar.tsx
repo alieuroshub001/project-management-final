@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import SidebarLinks from './SidebarLinks';
-import LogoutButton from '@/components/Employee/auth/LogoutButton';
+import LogoutButton from '@/components/Auth/LogoutButton';
 
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);

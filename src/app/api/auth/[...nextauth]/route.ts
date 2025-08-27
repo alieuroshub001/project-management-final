@@ -3,8 +3,8 @@ import NextAuth, { AuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import connectToDatabase from '@/lib/db';
 import { verifyPassword } from '@/lib/auth';
-import User from '@/models/employee/User';
-import { ISessionUser } from '@/types/employee';
+import User from '@/models/User';
+import { ISessionUser } from '@/types';
 
 interface ExtendedUser {
   id: string;

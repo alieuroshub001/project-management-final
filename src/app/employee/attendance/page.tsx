@@ -2,7 +2,7 @@
 "use client";
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import AttendanceModule from '@/components/Employee/Attendance/AttendanceModule';
+import AttendanceModule from '@/components/Attendance/AttendanceModule';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 function AttendancePageContent() {

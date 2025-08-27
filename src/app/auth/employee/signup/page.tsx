@@ -1,4 +1,4 @@
-import SignupForm from '@/components/Employee/auth/Signup';
+import SignupForm from '@/components/Auth/Signup';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
