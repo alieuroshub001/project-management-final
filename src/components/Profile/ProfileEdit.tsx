@@ -28,6 +28,7 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
 
   const employmentTypes: { value: EmploymentType; label: string }[] = [
     { value: 'full-time', label: 'Full Time' },
@@ -41,29 +42,60 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
   const fetchProfile = async () => {
     try {
       setFetchLoading(true);
+      setError('');
+      
       const response = await fetch('/api/profile');
+      
+      if (response.status === 404) {
+        // No profile exists - this is normal for new users
+        console.log('No profile found - user needs to create one');
+        setProfile(null);
+        setIsCreatingNew(true);
+        
+        // Initialize form with empty data for new profile
+        setFormData({
+          firstName: '',
+          lastName: '',
+          displayName: '',
+          dateOfJoining: undefined,
+          dateOfBirth: undefined,
+          designation: '',
+          department: '',
+          bio: '',
+          skills: [],
+          workLocation: '',
+          employmentType: 'full-time'
+        });
+        return;
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.message || 'Failed to fetch profile');
       }
 
-      setProfile(data.data);
-      // Initialize form with current data
-      setFormData({
-        firstName: data.data.firstName,
-        lastName: data.data.lastName,
-        displayName: data.data.displayName,
-        dateOfJoining: data.data.dateOfJoining ? new Date(data.data.dateOfJoining) : undefined,
-        dateOfBirth: data.data.dateOfBirth ? new Date(data.data.dateOfBirth) : undefined,
-        designation: data.data.designation,
-        department: data.data.department,
-        bio: data.data.bio,
-        skills: data.data.skills || [],
-        workLocation: data.data.workLocation,
-        employmentType: data.data.employmentType
-      });
+      if (data.success && data.data) {
+        setProfile(data.data);
+        setIsCreatingNew(false);
+        
+        // Initialize form with existing profile data
+        setFormData({
+          firstName: data.data.firstName,
+          lastName: data.data.lastName,
+          displayName: data.data.displayName,
+          dateOfJoining: data.data.dateOfJoining ? new Date(data.data.dateOfJoining) : undefined,
+          dateOfBirth: data.data.dateOfBirth ? new Date(data.data.dateOfBirth) : undefined,
+          designation: data.data.designation,
+          department: data.data.department,
+          bio: data.data.bio,
+          skills: data.data.skills || [],
+          workLocation: data.data.workLocation,
+          employmentType: data.data.employmentType
+        });
+      }
     } catch (err) {
+      console.error('Fetch profile error:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch profile');
     } finally {
       setFetchLoading(false);
@@ -98,8 +130,9 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
     setSuccess('');
 
     try {
+      const method = isCreatingNew ? 'POST' : 'PUT';
       const response = await fetch('/api/profile', {
-        method: 'PUT',
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
@@ -107,10 +140,10 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to update profile');
+        throw new Error(data.message || `Failed to ${isCreatingNew ? 'create' : 'update'} profile`);
       }
 
-      setSuccess('Profile updated successfully!');
+      setSuccess(`Profile ${isCreatingNew ? 'created' : 'updated'} successfully!`);
       
       setTimeout(() => {
         if (onSuccess) {
@@ -119,7 +152,7 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
       }, 2000);
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      setError(err instanceof Error ? err.message : `Failed to ${isCreatingNew ? 'create' : 'update'} profile`);
     } finally {
       setLoading(false);
     }
@@ -140,6 +173,21 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
         workLocation: profile.workLocation,
         employmentType: profile.employmentType
       });
+    } else {
+      // Reset to empty form for new profile
+      setFormData({
+        firstName: '',
+        lastName: '',
+        displayName: '',
+        dateOfJoining: undefined,
+        dateOfBirth: undefined,
+        designation: '',
+        department: '',
+        bio: '',
+        skills: [],
+        workLocation: '',
+        employmentType: 'full-time'
+      });
     }
     setError('');
     setSuccess('');
@@ -150,18 +198,9 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
       <div className="flex justify-center py-12">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-600 dark:text-indigo-400" />
-          <p className="text-gray-500 dark:text-gray-400 mt-2">Loading profile...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
-        <div className="flex items-center">
-          <AlertCircle className="w-5 h-5 text-red-500 mr-3" />
-          <p className="text-red-700 dark:text-red-300">Failed to load profile data</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">
+            {isCreatingNew ? 'Preparing profile creation...' : 'Loading profile...'}
+          </p>
         </div>
       </div>
     );
@@ -173,8 +212,15 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
         <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Profile</h2>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">Update your personal and professional information</p>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {isCreatingNew ? 'Create Your Profile' : 'Edit Profile'}
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                {isCreatingNew 
+                  ? 'Fill in your details to create your employee profile'
+                  : 'Update your personal and professional information'
+                }
+              </p>
             </div>
             <button
               type="button"
@@ -324,7 +370,7 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
                     Employment Type
                   </label>
                   <select
-                    value={formData.employmentType || ''}
+                    value={formData.employmentType || 'full-time'}
                     onChange={(e) => handleInputChange('employmentType', e.target.value as EmploymentType)}
                     className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-3 text-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
                   >
@@ -429,12 +475,12 @@ export default function ProfileEdit({ onSuccess }: ProfileEditProps) {
                 {loading ? (
                   <div className="flex items-center">
                     <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" />
-                    Saving...
+                    {isCreatingNew ? 'Creating...' : 'Saving...'}
                   </div>
                 ) : (
                   <div className="flex items-center">
                     <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    {isCreatingNew ? 'Create Profile' : 'Save Changes'}
                   </div>
                 )}
               </button>

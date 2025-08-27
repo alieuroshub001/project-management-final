@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { IEmployeeProfile, IProfileWithDetails } from '@/types/profile';
+import ProfileImageUpload from './ProfileImageUpload';
 import {
   MapPin,
   Calendar,
@@ -11,7 +12,6 @@ import {
   Briefcase,
   Edit,
   Download,
-  Camera,
   Star,
   Award,
   GraduationCap,
@@ -21,7 +21,9 @@ import {
   CheckCircle,
   ExternalLink,
   Shield,
-  RefreshCw
+  RefreshCw,
+  Plus,
+  UserPlus
 } from 'lucide-react';
 
 interface ProfileOverviewProps {
@@ -32,32 +34,33 @@ export default function ProfileOverview({ onEditClick }: ProfileOverviewProps) {
   const [profile, setProfile] = useState<IProfileWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [profileExists, setProfileExists] = useState(true);
 
   const fetchProfile = async () => {
     try {
       setLoading(true);
       setError('');
       
-      console.log('Fetching profile...'); // Debug log
-      
       const response = await fetch('/api/profile?includeDetails=true', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        cache: 'no-store' // Prevent caching issues
+        cache: 'no-store'
       });
       
-      console.log('Response status:', response.status); // Debug log
-      
+      if (response.status === 404) {
+        setProfileExists(false);
+        setProfile(null);
+        return;
+      }
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.log('Error response:', errorText); // Debug log
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP ${response.status}: Failed to fetch profile`);
       }
 
       const data = await response.json();
-      console.log('Response data:', data); // Debug log
 
       if (!data.success) {
         throw new Error(data.message || 'Failed to fetch profile');
@@ -68,6 +71,7 @@ export default function ProfileOverview({ onEditClick }: ProfileOverviewProps) {
       }
 
       setProfile(data.data);
+      setProfileExists(true);
     } catch (err) {
       console.error('Fetch profile error:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch profile');
@@ -79,6 +83,24 @@ export default function ProfileOverview({ onEditClick }: ProfileOverviewProps) {
   useEffect(() => {
     fetchProfile();
   }, []);
+
+  const handleImageUploadSuccess = (imageUrl: string, imageType: 'profile' | 'cover') => {
+    if (profile) {
+      setProfile(prev => ({
+        ...prev!,
+        [imageType === 'profile' ? 'profileImage' : 'coverImage']: { secure_url: imageUrl }
+      }));
+    }
+  };
+
+  const handleImageRemoveSuccess = (imageType: 'profile' | 'cover') => {
+    if (profile) {
+      setProfile(prev => ({
+        ...prev!,
+        [imageType === 'profile' ? 'profileImage' : 'coverImage']: undefined
+      }));
+    }
+  };
 
   const getCompletionColor = (percentage: number) => {
     if (percentage >= 80) return 'text-green-600 dark:text-green-400';
@@ -100,55 +122,154 @@ export default function ProfileOverview({ onEditClick }: ProfileOverviewProps) {
     );
   }
 
-  if (error) {
+  // Show profile creation prompt when no profile exists
+  if (!profileExists || !profile) {
     return (
-      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
-        <div className="flex items-center mb-4">
-          <AlertCircle className="w-5 h-5 text-red-500 mr-3" />
-          <div>
-            <h3 className="text-lg font-medium text-red-800 dark:text-red-300">Profile Load Error</h3>
-            <p className="text-red-700 dark:text-red-300 mt-1">{error}</p>
+      <div className="max-w-4xl mx-auto">
+        {/* Welcome Header */}
+        <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 mb-8">
+          <div className="mx-auto w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mb-6">
+            <UserPlus className="w-12 h-12 text-white" />
           </div>
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={fetchProfile}
-            className="flex items-center px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Try again
-          </button>
-          {error.includes('Profile not found') && (
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+            Welcome to Employee Portal!
+          </h1>
+          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
+            Let's get you started by creating your employee profile. This will help your colleagues 
+            learn about you and enable you to access all portal features.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={onEditClick}
-              className="flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+              className="inline-flex items-center px-8 py-4 bg-indigo-600 text-white text-lg font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg hover:shadow-xl"
             >
-              <Edit className="w-4 h-4 mr-2" />
-              Create Profile
+              <Plus className="w-5 h-5 mr-3" />
+              Create Your Profile
             </button>
-          )}
+            <button
+              onClick={fetchProfile}
+              className="inline-flex items-center px-6 py-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-lg font-medium rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <RefreshCw className="w-5 h-5 mr-2" />
+              Refresh
+            </button>
+          </div>
         </div>
-      </div>
-    );
-  }
 
-  if (!profile) {
-    return (
-      <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-        <div className="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-          <User className="w-8 h-8 text-gray-400" />
+        {/* Getting Started Guide */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center">
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mx-auto mb-4">
+              <User className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Personal Info
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Add your basic information, contact details, and professional background
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center">
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center mx-auto mb-4">
+              <Briefcase className="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Experience
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Showcase your work experience, education, and certifications
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center">
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center mx-auto mb-4">
+              <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Skills & More
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Highlight your skills, languages, and connect your social profiles
+            </p>
+          </div>
         </div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Profile Found</h3>
-        <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-6">
-          You don't have a profile yet. Create one to get started with the employee portal.
-        </p>
-        <button
-          onClick={onEditClick}
-          className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          <Edit className="w-4 h-4 mr-2" />
-          Create Profile
-        </button>
+
+        {/* Benefits of Creating Profile */}
+        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/10 dark:to-purple-900/10 rounded-xl border border-indigo-200 dark:border-indigo-800 p-8">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+            Why Create Your Profile?
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex items-start">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                <Users className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                  Connect with Team
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Help your colleagues find and connect with you across the organization
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                <Award className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                  Showcase Skills
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Display your expertise and be discovered for exciting opportunities
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                <Shield className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                  Access Features
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Unlock all portal features like team directory and collaboration tools
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                <Calendar className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                  Stay Updated
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Receive important updates and never miss team celebrations
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-500 mr-3" />
+              <div>
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Error Loading Profile</h3>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -159,38 +280,24 @@ export default function ProfileOverview({ onEditClick }: ProfileOverviewProps) {
     <div className="space-y-8">
       {/* Profile Header */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {/* Cover Image */}
-        <div className="h-32 bg-gradient-to-r from-indigo-500 to-purple-600 relative">
-          {profile.coverImage && (
-            <img
-              src={profile.coverImage.secure_url}
-              alt="Cover"
-              className="w-full h-full object-cover"
-            />
-          )}
-          <button className="absolute top-4 right-4 p-2 bg-black/30 rounded-lg text-white hover:bg-black/50 transition-colors">
-            <Camera className="w-4 h-4" />
-          </button>
-        </div>
+        {/* Cover Image with Upload */}
+        <ProfileImageUpload
+          currentImage={profile.coverImage?.secure_url}
+          imageType="cover"
+          onUploadSuccess={(imageUrl) => handleImageUploadSuccess(imageUrl, 'cover')}
+          onRemoveSuccess={() => handleImageRemoveSuccess('cover')}
+        />
 
         {/* Profile Info */}
         <div className="px-6 pb-6 relative">
-          {/* Profile Picture */}
+          {/* Profile Picture with Upload */}
           <div className="relative -mt-16 mb-4">
-            <div className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800 bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-              {profile.profileImage ? (
-                <img
-                  src={profile.profileImage.secure_url}
-                  alt={profile.displayName}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <User className="w-12 h-12 text-gray-400" />
-              )}
-            </div>
-            <button className="absolute bottom-0 right-0 p-1.5 bg-indigo-600 rounded-full text-white hover:bg-indigo-700 transition-colors">
-              <Camera className="w-3 h-3" />
-            </button>
+            <ProfileImageUpload
+              currentImage={profile.profileImage?.secure_url}
+              imageType="profile"
+              onUploadSuccess={(imageUrl) => handleImageUploadSuccess(imageUrl, 'profile')}
+              onRemoveSuccess={() => handleImageRemoveSuccess('profile')}
+            />
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6">

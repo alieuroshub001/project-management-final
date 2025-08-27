@@ -1,5 +1,26 @@
-// models/employee/EmployeeProfile.ts
+// models/Profile.ts
 import mongoose, { Schema, Model, Document } from 'mongoose';
+
+// Profile Settings Interface
+interface IProfileSettings {
+  // Notification settings
+  emailNotifications?: boolean;
+  pushNotifications?: boolean;
+  profileUpdates?: boolean;
+  teamAnnouncements?: boolean;
+  birthdayReminders?: boolean;
+  workAnniversaries?: boolean;
+  
+  // Privacy settings - Only public and private
+  profileVisibility?: 'public' | 'private';
+  showEmail?: boolean;
+  showMobile?: boolean;
+  showBirthday?: boolean;
+  showWorkAnniversary?: boolean;
+  
+  // Security settings
+  twoFactorEnabled?: boolean;
+}
 
 // Define the document interface that extends mongoose Document
 export interface IEmployeeProfileDocument extends Document {
@@ -138,6 +159,7 @@ export interface IEmployeeProfileDocument extends Document {
     original_filename: string;
     created_at: string;
   };
+  settings?: IProfileSettings;
   isProfileComplete: boolean;
   completionPercentage: number;
   createdAt: Date;
@@ -505,7 +527,6 @@ const EmployeeProfileSchema: Schema<IEmployeeProfileDocument> = new Schema({
       default: false
     }
   }],
-  // FIXED: Made all file upload fields optional by removing required: true
   profileImage: {
     public_id: { type: String },
     secure_url: { type: String },
@@ -538,6 +559,30 @@ const EmployeeProfileSchema: Schema<IEmployeeProfileDocument> = new Schema({
     height: { type: Number },
     original_filename: { type: String },
     created_at: { type: String }
+  },
+  // Settings field with only public/private visibility
+  settings: {
+    // Notification settings
+    emailNotifications: { type: Boolean, default: true },
+    pushNotifications: { type: Boolean, default: true },
+    profileUpdates: { type: Boolean, default: true },
+    teamAnnouncements: { type: Boolean, default: true },
+    birthdayReminders: { type: Boolean, default: true },
+    workAnniversaries: { type: Boolean, default: true },
+    
+    // Privacy settings - Only public and private
+    profileVisibility: {
+      type: String,
+      enum: ['public', 'private'],
+      default: 'public'
+    },
+    showEmail: { type: Boolean, default: true },
+    showMobile: { type: Boolean, default: false },
+    showBirthday: { type: Boolean, default: true },
+    showWorkAnniversary: { type: Boolean, default: true },
+    
+    // Security settings
+    twoFactorEnabled: { type: Boolean, default: false }
   },
   isProfileComplete: {
     type: Boolean,

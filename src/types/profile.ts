@@ -1,6 +1,7 @@
+// types/profile.ts
 import { IApiResponse, ISessionUser } from ".";
 
-// Cloudinary File Interfaces (if not available from main index)
+// Cloudinary File Interfaces
 export interface ICloudinaryFile {
   public_id: string;
   secure_url: string;
@@ -57,140 +58,7 @@ export interface IFileDeleteResponse {
   message?: string;
 }
 
-// Employee Profile Interface
-export interface IEmployeeProfile {
-  id: string;
-  employeeId: string;
-  userId: string;
-  firstName: string;
-  lastName: string;
-  displayName?: string;
-  email: string;
-  mobile: string;
-  dateOfJoining?: Date;
-  dateOfBirth?: Date;
-  designation?: string;
-  department?: string;
-  reportingManager?: string;
-  reportingManagerName?: string;
-  workLocation?: string;
-  employmentType: EmploymentType;
-  bio?: string;
-  skills?: string[];
-  languages?: ILanguageProficiency[];
-  education?: IEducation[];
-  experience?: IWorkExperience[];
-  certifications?: ICertification[];
-  socialLinks?: ISocialLink[];
-  emergencyContacts?: IEmergencyContact[];
-  profileImage?: ICloudinaryFile;
-  coverImage?: ICloudinaryFile;
-  resume?: ICloudinaryFile;
-  isProfileComplete: boolean;
-  completionPercentage: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Language Proficiency Interface
-export interface ILanguageProficiency {
-  language: string;
-  proficiency: LanguageProficiencyLevel;
-  isPrimary: boolean;
-}
-
-// Education Interface
-export interface IEducation {
-  id: string;
-  institution: string;
-  degree: string;
-  fieldOfStudy: string;
-  startDate: Date;
-  endDate?: Date;
-  isCurrent: boolean;
-  grade?: string;
-  description?: string;
-  attachments?: ICloudinaryFile[];
-}
-
-// Work Experience Interface
-export interface IWorkExperience {
-  id: string;
-  company: string;
-  position: string;
-  location?: string;
-  startDate: Date;
-  endDate?: Date;
-  isCurrent: boolean;
-  description?: string;
-  skillsUsed?: string[];
-  achievements?: string[];
-  attachments?: ICloudinaryFile[];
-}
-
-// Certification Interface
-export interface ICertification {
-  id: string;
-  name: string;
-  issuingOrganization: string;
-  issueDate: Date;
-  expirationDate?: Date;
-  doesNotExpire: boolean;
-  credentialId?: string;
-  credentialUrl?: string;
-  attachments?: ICloudinaryFile[];
-}
-
-// Social Link Interface
-export interface ISocialLink {
-  platform: SocialPlatform;
-  url: string;
-  isPublic: boolean;
-}
-
-// Emergency Contact Interface
-export interface IEmergencyContact {
-  id: string;
-  name: string;
-  relationship: string;
-  mobile: string;
-  email?: string;
-  address?: string;
-  isPrimary: boolean;
-}
-
-// Password Management Interface
-export interface IPasswordChange {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
-}
-
-export interface IPasswordReset {
-  email: string;
-  mobile: string;
-  otp: string;
-  newPassword: string;
-  confirmPassword: string;
-}
-
-// Account Deletion Interface
-export interface IAccountDeletionRequest {
-  reason: string;
-  feedback?: string;
-  password: string;
-}
-
-// Profile Completion Status
-export interface IProfileCompletion {
-  totalSteps: number;
-  completedSteps: number;
-  completionPercentage: number;
-  pendingSections: ProfileSection[];
-  lastUpdated: Date;
-}
-
-// Enums and Types
+// Enums and Types (moved up for better organization)
 export type EmploymentType = 
   | 'full-time'
   | 'part-time'
@@ -231,11 +99,175 @@ export type ProfileSection =
   | 'emergency'
   | 'documents';
 
+// Updated ProfileVisibility - only public and private
 export type ProfileVisibility = 
   | 'public'
-  | 'team'
-  | 'manager'
   | 'private';
+
+// Language Proficiency Interface
+export interface ILanguageProficiency {
+  language: string;
+  proficiency: LanguageProficiencyLevel;
+  isPrimary: boolean;
+}
+
+// Education Interface - fixed name from IWorkExperience reference
+export interface IEducation {
+  id: string;
+  institution: string;
+  degree: string;
+  fieldOfStudy: string;
+  startDate: Date;
+  endDate?: Date;
+  isCurrent: boolean;
+  grade?: string;
+  description?: string;
+  attachments?: ICloudinaryFile[];
+}
+
+// Work Experience Interface - corrected to use IExperience as referenced in components
+export interface IExperience {
+  id: string;
+  company: string;
+  position: string;
+  location?: string;
+  startDate: Date;
+  endDate?: Date;
+  isCurrent: boolean;
+  description?: string;
+  skillsUsed?: string[];
+  achievements?: string[];
+  attachments?: ICloudinaryFile[];
+}
+
+// Keep both for compatibility
+export interface IWorkExperience extends IExperience {}
+
+// Certification Interface
+export interface ICertification {
+  id: string;
+  name: string;
+  issuingOrganization: string;
+  issueDate: Date;
+  expirationDate?: Date;
+  doesNotExpire: boolean;
+  credentialId?: string;
+  credentialUrl?: string;
+  attachments?: ICloudinaryFile[];
+}
+
+// Social Link Interface
+export interface ISocialLink {
+  platform: SocialPlatform;
+  url: string;
+  isPublic: boolean;
+}
+
+// Emergency Contact Interface
+export interface IEmergencyContact {
+  id: string;
+  name: string;
+  relationship: string;
+  mobile: string;
+  email?: string;
+  address?: string;
+  isPrimary: boolean;
+}
+
+// Settings Interfaces
+export interface INotificationSettings {
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+  profileUpdates: boolean;
+  teamAnnouncements: boolean;
+  birthdayReminders: boolean;
+  workAnniversaries: boolean;
+}
+
+export interface IPrivacySettings {
+  profileVisibility: ProfileVisibility;
+  showEmail: boolean;
+  showMobile: boolean;
+  showBirthday: boolean;
+  showWorkAnniversary: boolean;
+}
+
+export interface ISecuritySettings {
+  twoFactorEnabled: boolean;
+}
+
+export interface IProfileSettings {
+  notifications?: INotificationSettings;
+  privacy?: IPrivacySettings;
+  security?: ISecuritySettings;
+}
+
+// Employee Profile Interface - updated to use IExperience
+export interface IEmployeeProfile {
+  id: string;
+  employeeId: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  displayName?: string;
+  email: string;
+  mobile: string;
+  dateOfJoining?: Date;
+  dateOfBirth?: Date;
+  designation?: string;
+  department?: string;
+  reportingManager?: string;
+  reportingManagerName?: string;
+  workLocation?: string;
+  employmentType: EmploymentType;
+  bio?: string;
+  skills?: string[];
+  languages?: ILanguageProficiency[];
+  education?: IEducation[];
+  experience?: IExperience[]; // Changed from IWorkExperience to IExperience to match components
+  certifications?: ICertification[];
+  socialLinks?: ISocialLink[];
+  emergencyContacts?: IEmergencyContact[];
+  profileImage?: ICloudinaryFile;
+  coverImage?: ICloudinaryFile;
+  resume?: ICloudinaryFile;
+  settings?: IProfileSettings; // Added settings field
+  isProfileComplete: boolean;
+  completionPercentage: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Password Management Interface
+export interface IPasswordChange {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface IPasswordReset {
+  email: string;
+  mobile: string;
+  otp: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+// Account Deletion Interface
+export interface IAccountDeletionRequest {
+  reason: string;
+  feedback?: string;
+  password: string;
+}
+
+// Profile Completion Status
+export interface IProfileCompletion {
+  totalSteps: number;
+  completedSteps: number;
+  completionPercentage: number;
+  pendingSections: ProfileSection[];
+  lastUpdated: Date;
+}
 
 // Request Interfaces
 export interface IProfileUpdateRequest {
@@ -264,7 +296,7 @@ export interface IEducationUpdateRequest {
 }
 
 export interface IExperienceUpdateRequest {
-  experience: Omit<IWorkExperience, 'id' | 'attachments'>[];
+  experience: Omit<IExperience, 'id' | 'attachments'>[];
   filesToUpload?: File[];
   filesToDelete?: string[];
 }
