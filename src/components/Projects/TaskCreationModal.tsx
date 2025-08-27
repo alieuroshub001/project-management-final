@@ -90,7 +90,7 @@ export default function TaskCreateModal({
     uploadFormData.append('projectId', projectId);
 
     try {
-      const response = await fetch('/api/employee/projects/upload', {
+      const response = await fetch('/api/projects/upload', {
         method: 'POST',
         body: uploadFormData
       });
@@ -190,7 +190,7 @@ export default function TaskCreateModal({
     setError('');
 
     try {
-      const response = await fetch(`/api/employee/projects/${projectId}/tasks`, {
+      const response = await fetch(`/api/projects/${projectId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

@@ -57,7 +57,7 @@ export default function AttendanceQuickActions({ onActionClick }: QuickActionsPr
 
   const fetchQuickActionStatus = async () => {
     try {
-      const response = await fetch('/api/employee/attendance/quick-status');
+      const response = await fetch('/api/attendance/quick-status');
       const data = await response.json();
 
       if (response.ok) {
@@ -86,7 +86,7 @@ export default function AttendanceQuickActions({ onActionClick }: QuickActionsPr
           onActionClick('checkin');
           return;
         } else {
-          endpoint = '/api/employee/attendance/breaks';
+          endpoint = '/api/attendance/breaks';
           body = { breakType: 'general' };
         }
       } else if (action === 'namaz') {
@@ -97,7 +97,7 @@ export default function AttendanceQuickActions({ onActionClick }: QuickActionsPr
         } else {
           // For quick action, we'll start a general prayer break
           // User can specify which prayer on the main page
-          endpoint = '/api/employee/attendance/namaz';
+          endpoint = '/api/attendance/namaz';
           body = { namazType: 'zuhr' }; // Default to Zuhr for quick action
         }
       }

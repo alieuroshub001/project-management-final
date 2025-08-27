@@ -1,4 +1,4 @@
-// app/api/employee/attendance/namaz/route.ts
+// app/api/attendance/namaz/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import connectToDatabase from '@/lib/db';

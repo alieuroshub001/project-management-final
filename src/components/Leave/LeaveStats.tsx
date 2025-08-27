@@ -30,7 +30,7 @@ export default function LeaveStats() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/employee/leave/stats');
+      const response = await fetch('/api/leave/stats');
       if (response.ok) {
         const data = await response.json();
         setStats(data.data);

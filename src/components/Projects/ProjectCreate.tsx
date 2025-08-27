@@ -82,7 +82,7 @@ export default function ProjectCreate({ onSuccess }: ProjectCreateProps) {
     });
 
     try {
-      const response = await fetch('/api/employee/projects/upload', {
+      const response = await fetch('/api/projects/upload', {
         method: 'POST',
         body: uploadFormData
       });
@@ -107,7 +107,7 @@ export default function ProjectCreate({ onSuccess }: ProjectCreateProps) {
 
   const removeAttachment = async (publicId: string) => {
     try {
-      await fetch('/api/employee/projects/upload', {
+      await fetch('/api/projects/upload', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publicIds: [publicId] })
@@ -187,7 +187,7 @@ export default function ProjectCreate({ onSuccess }: ProjectCreateProps) {
     setSuccess('');
 
     try {
-      const response = await fetch('/api/employee/projects', {
+      const response = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

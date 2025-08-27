@@ -1,4 +1,4 @@
-//src/app/api/employee/auth/login/route.ts
+//src/app/api/auth/login/route.ts
 import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { NextRequest } from 'next/server';

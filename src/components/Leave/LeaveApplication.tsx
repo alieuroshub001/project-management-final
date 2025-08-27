@@ -72,7 +72,7 @@ export default function LeaveApplication({ onSuccess }: LeaveApplicationProps) {
     });
 
     try {
-      const response = await fetch('/api/employee/leave/upload', {
+      const response = await fetch('/api/leave/upload', {
         method: 'POST',
         body: formDataUpload
       });
@@ -97,7 +97,7 @@ export default function LeaveApplication({ onSuccess }: LeaveApplicationProps) {
 
   const removeAttachment = async (publicId: string) => {
     try {
-      await fetch('/api/employee/leave/upload', {
+      await fetch('/api/leave/upload', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publicIds: [publicId] })
@@ -143,7 +143,7 @@ export default function LeaveApplication({ onSuccess }: LeaveApplicationProps) {
     setSuccess('');
 
     try {
-      const response = await fetch('/api/employee/leave/apply', {
+      const response = await fetch('/api/leave/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

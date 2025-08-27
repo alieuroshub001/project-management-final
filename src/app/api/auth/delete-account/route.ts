@@ -1,4 +1,4 @@
-//src/app/api/employee/auth/delete-account/route.ts
+//src/app/api/auth/delete-account/route.ts
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';

@@ -37,7 +37,7 @@ export default function ProjectCalendar() {
   const fetchProjects = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/employee/projects?limit=50');
+      const response = await fetch('/api/projects?limit=50');
       const data = await response.json();
 
       if (response.ok && data.data) {

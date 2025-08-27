@@ -1,4 +1,4 @@
-// app/api/employee/auth/reset-password/route.ts
+// app/api/auth/reset-password/route.ts
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import { verifyOTP, hashPassword } from '@/lib/auth';

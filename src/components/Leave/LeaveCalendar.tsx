@@ -16,7 +16,7 @@ export default function LeaveCalendar() {
   const fetchLeaves = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/employee/leave/list?year=${currentDate.getFullYear()}`);
+      const response = await fetch(`/api/leave/list?year=${currentDate.getFullYear()}`);
       const data = await response.json();
 
       if (response.ok) {

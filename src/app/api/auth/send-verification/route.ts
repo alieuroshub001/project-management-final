@@ -1,4 +1,4 @@
-//src/app/api/employee/auth/send-verification/route.ts
+//src/app/api/auth/send-verification/route.ts
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';

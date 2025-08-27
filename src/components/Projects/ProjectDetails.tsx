@@ -50,7 +50,7 @@ export default function ProjectDetails({ projectId, onBack }: ProjectDetailsProp
     try {
       setLoading(true);
       setError('');
-      const response = await fetch(`/api/employee/projects/${projectId}`);
+      const response = await fetch(`/api/projects/${projectId}`);
       const data: IProjectApiResponse<IProjectWithDetails> = await response.json();
 
       if (!response.ok) {

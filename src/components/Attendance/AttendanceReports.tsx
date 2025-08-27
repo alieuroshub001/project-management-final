@@ -37,7 +37,7 @@ export default function AttendanceReports() {
     setError('');
 
     try {
-      const response = await fetch('/api/employee/attendance/dashboard', {
+      const response = await fetch('/api/attendance/dashboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reportParams)

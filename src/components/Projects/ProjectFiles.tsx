@@ -89,7 +89,7 @@ export default function ProjectFiles({ projectId, attachments = [], onRefresh }:
     formData.append('projectId', projectId);
 
     try {
-      const response = await fetch('/api/employee/projects/upload', {
+      const response = await fetch('/api/projects/upload', {
         method: 'POST',
         body: formData
       });
@@ -112,7 +112,7 @@ export default function ProjectFiles({ projectId, attachments = [], onRefresh }:
     if (!confirm('Are you sure you want to delete this file?')) return;
 
     try {
-      const response = await fetch('/api/employee/projects/upload', {
+      const response = await fetch('/api/projects/upload', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publicIds: [publicId] })
@@ -139,7 +139,7 @@ export default function ProjectFiles({ projectId, attachments = [], onRefresh }:
     if (!confirm(`Are you sure you want to delete ${selectedFiles.length} files?`)) return;
 
     try {
-      const response = await fetch('/api/employee/projects/upload', {
+      const response = await fetch('/api/projects/upload', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publicIds: selectedFiles })

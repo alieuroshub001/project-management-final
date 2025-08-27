@@ -63,7 +63,7 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
   const fetchTodaysAttendance = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/employee/attendance/checkin');
+      const response = await fetch('/api/attendance/checkin');
       const data = await response.json();
 
       if (response.ok) {
@@ -116,7 +116,7 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
         ...(lateReason && { lateCheckInReason: lateReason })
       };
 
-      const response = await fetch('/api/employee/attendance/checkin', {
+      const response = await fetch('/api/attendance/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
@@ -160,7 +160,7 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
         ...(earlyReason && { earlyCheckOutReason: earlyReason })
       };
 
-      const response = await fetch('/api/employee/attendance/checkout', {
+      const response = await fetch('/api/attendance/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
@@ -187,7 +187,7 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
     setError('');
 
     try {
-      const endpoint = type === 'break' ? '/api/employee/attendance/breaks' : '/api/employee/attendance/namaz';
+      const endpoint = type === 'break' ? '/api/attendance/breaks' : '/api/attendance/namaz';
       const method = action === 'start' ? 'POST' : 'PUT';
       
       const requestData = action === 'start' 

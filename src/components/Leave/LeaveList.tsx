@@ -58,7 +58,7 @@ export default function LeaveList() {
         ...(filters.year && { year: filters.year })
       });
 
-      const response = await fetch(`/api/employee/leave/list?${params}`);
+      const response = await fetch(`/api/leave/list?${params}`);
       const data = await response.json();
 
       if (!response.ok) {

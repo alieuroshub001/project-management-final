@@ -42,7 +42,7 @@ export default function ProjectDashboard({
   const fetchDashboard = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/employee/projects/dashboard');
+      const response = await fetch('/api/projects/dashboard');
       const data: IProjectApiResponse<IProjectDashboard> = await response.json();
 
       if (!response.ok) {
@@ -60,7 +60,7 @@ export default function ProjectDashboard({
   const fetchStatistics = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/employee/projects/dashboard?type=statistics');
+      const response = await fetch('/api/projects/dashboard?type=statistics');
       const data: IProjectApiResponse<IProjectStatistics> = await response.json();
 
       if (!response.ok) {

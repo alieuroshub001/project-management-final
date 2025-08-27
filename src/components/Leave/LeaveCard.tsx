@@ -92,7 +92,7 @@ export default function LeaveCard({ leave, onUpdate }: LeaveCardProps) {
 
     setCancelling(true);
     try {
-      const response = await fetch(`/api/employee/leave/${leave.id}/cancel`, {
+      const response = await fetch(`/api/leave/${leave.id}/cancel`, {
         method: 'POST'
       });
 

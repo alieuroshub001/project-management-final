@@ -91,7 +91,7 @@ export default function MilestoneCreateModal({
     setError('');
 
     try {
-      const response = await fetch(`/api/employee/projects/${projectId}/milestones`, {
+      const response = await fetch(`/api/projects/${projectId}/milestones`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

@@ -1,4 +1,4 @@
-// app/api/employee/auth/forgot-password/route.ts
+// app/api/auth/forgot-password/route.ts
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import { createOTPRecord } from '@/lib/auth';

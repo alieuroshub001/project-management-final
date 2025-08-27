@@ -15,7 +15,7 @@ export default function DeleteAccountButton({ userId }: { userId: string }) {
     setError('');
 
     try {
-      const response = await fetch('/api/employee/auth/delete-account', {
+      const response = await fetch('/api/auth/delete-account', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

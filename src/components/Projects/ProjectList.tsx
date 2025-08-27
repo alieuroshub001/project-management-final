@@ -59,7 +59,7 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
         isArchived: filters.isArchived.toString()
       });
 
-      const response = await fetch(`/api/employee/projects?${params}`);
+      const response = await fetch(`/api/projects?${params}`);
       const data: IProjectApiResponse<{
         projects: IProject[];
         pagination: {

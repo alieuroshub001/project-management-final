@@ -1,4 +1,4 @@
-// app/api/employee/projects/[id]/milestones/route.ts
+// app/api/projects/[id]/milestones/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import connectToDatabase from '@/lib/db';

@@ -1,4 +1,4 @@
-// app/api/employee/projects/upload/route.ts
+// app/api/projects/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { v2 as cloudinary } from 'cloudinary';

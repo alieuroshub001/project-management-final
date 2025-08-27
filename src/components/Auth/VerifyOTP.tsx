@@ -27,7 +27,7 @@ export default function VerifyOTPForm({ email, type }: VerifyOTPFormProps) {
         throw new Error('Passwords do not match');
       }
 
-      const response = await fetch('/api/employee/auth/verify-otp', {
+      const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

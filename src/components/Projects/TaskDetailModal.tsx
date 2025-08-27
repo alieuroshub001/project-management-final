@@ -71,7 +71,7 @@ export default function TaskDetailsModal({
   const fetchTask = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/employee/projects/${projectId}/tasks/${taskId}`);
+      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -110,7 +110,7 @@ export default function TaskDetailsModal({
     setError('');
 
     try {
-      const response = await fetch(`/api/employee/projects/${projectId}/tasks/${taskId}`, {
+      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editData)
@@ -143,7 +143,7 @@ export default function TaskDetailsModal({
     );
 
     try {
-      const response = await fetch(`/api/employee/projects/${projectId}/tasks/${taskId}`, {
+      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ checklist: updatedChecklist })

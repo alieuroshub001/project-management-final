@@ -12,7 +12,7 @@ export const useLeave = () => {
     try {
       setLoading(true);
       const params = new URLSearchParams(filters || {});
-      const response = await fetch(`/api/employee/leave/list?${params}`);
+      const response = await fetch(`/api/leave/list?${params}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -30,7 +30,7 @@ export const useLeave = () => {
   const fetchBalance = async (year?: number) => {
     try {
       const currentYear = year || new Date().getFullYear();
-      const response = await fetch(`/api/employee/leave/balance?year=${currentYear}`);
+      const response = await fetch(`/api/leave/balance?year=${currentYear}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -45,7 +45,7 @@ export const useLeave = () => {
 
   const cancelLeave = async (leaveId: string) => {
     try {
-      const response = await fetch(`/api/employee/leave/${leaveId}/cancel`, {
+      const response = await fetch(`/api/leave/${leaveId}/cancel`, {
         method: 'POST'
       });
 
@@ -65,7 +65,7 @@ export const useLeave = () => {
 
   const applyLeave = async (leaveData: any) => {
     try {
-      const response = await fetch('/api/employee/leave/apply', {
+      const response = await fetch('/api/leave/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(leaveData)

@@ -1,4 +1,4 @@
-// app/api/employee/attendance/checkin/route.ts
+// app/api/attendance/checkin/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import connectToDatabase from '@/lib/db';

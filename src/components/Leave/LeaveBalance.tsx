@@ -69,7 +69,7 @@ export default function LeaveBalance() {
   const fetchBalance = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/employee/leave/balance?year=${selectedYear}`);
+      const response = await fetch(`/api/leave/balance?year=${selectedYear}`);
       const data = await response.json();
 
       if (!response.ok) {

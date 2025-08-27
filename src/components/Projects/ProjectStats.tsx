@@ -39,7 +39,7 @@ export default function ProjectStats() {
       setError(null);
       
       // This would connect to your actual stats endpoint
-      const response = await fetch('/api/employee/projects/dashboard?type=stats');
+      const response = await fetch('/api/projects/dashboard?type=stats');
       const data = await response.json();
       
       if (response.ok && data.data) {

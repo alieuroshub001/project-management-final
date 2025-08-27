@@ -55,7 +55,7 @@ export default function AttendanceStats() {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/employee/attendance/stats?timeframe=${timeframe}`);
+      const response = await fetch(`/api/attendance/stats?timeframe=${timeframe}`);
       const data = await response.json();
 
       if (!response.ok) {

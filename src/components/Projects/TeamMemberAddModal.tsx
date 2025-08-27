@@ -137,7 +137,7 @@ export default function TeamMemberAddModal({
     setError('');
     
     try {
-      const response = await fetch(`/api/employee/projects/employee-search?q=${encodeURIComponent(query)}&projectId=${projectId}`, {
+      const response = await fetch(`/api/projects/employee-search?q=${encodeURIComponent(query)}&projectId=${projectId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
@@ -249,7 +249,7 @@ export default function TeamMemberAddModal({
         employeeMobile: selectedEmployee?.mobile
       };
 
-      const response = await fetch(`/api/employee/projects/${projectId}/team`, {
+      const response = await fetch(`/api/projects/${projectId}/team`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submitData)

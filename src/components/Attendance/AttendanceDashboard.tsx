@@ -25,7 +25,7 @@ export default function AttendanceDashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/employee/attendance/dashboard');
+      const response = await fetch('/api/attendance/dashboard');
       const data = await response.json();
 
       if (!response.ok) {

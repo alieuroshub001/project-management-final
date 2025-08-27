@@ -47,7 +47,7 @@ export default function LeaveEditModal({ leave, isOpen, onClose, onUpdate }: Lea
     setError('');
 
     try {
-      const response = await fetch(`/api/employee/leave/${leave.id}/edit`, {
+      const response = await fetch(`/api/leave/${leave.id}/edit`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

@@ -43,7 +43,7 @@ export default function AttendanceHistory() {
         ...(filters.shift && { shift: filters.shift })
       });
 
-      const response = await fetch(`/api/employee/attendance?${params}`);
+      const response = await fetch(`/api/attendance?${params}`);
       const data = await response.json();
 
       if (!response.ok) {
