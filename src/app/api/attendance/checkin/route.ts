@@ -7,7 +7,8 @@ import {
   ICheckInRequest,
   IAttendanceApiResponse,
   IAttendance,
-  ShiftType
+  ShiftType,
+  ITodaysAttendance
 } from '@/types/attendance';
 import { authOptions } from '@/lib/auth';
 
@@ -148,15 +149,40 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Validate custom time logic for random shift
+    if (shift === 'random' && customStartTime && customEndTime) {
+      const startTime = new Date(customStartTime);
+      const endTime = new Date(customEndTime);
+      if (endTime <= startTime) {
+        return NextResponse.json<IAttendanceApiResponse>({
+          success: false,
+          message: 'End time must be after start time'
+        }, { status: 400 });
+      }
+      
+      // Check if shift is reasonable (between 4-12 hours)
+      const shiftDuration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+      if (shiftDuration < 4 || shiftDuration > 12) {
+        return NextResponse.json<IAttendanceApiResponse>({
+          success: false,
+          message: 'Shift duration must be between 4 and 12 hours'
+        }, { status: 400 });
+      }
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Check if already checked in today
+    // Check if already checked in today - STRICT CHECK
     const existingAttendance = await Attendance.findTodaysAttendance(session.user.id);
-    if (existingAttendance?.checkInTime) {
+    if (existingAttendance && existingAttendance.checkInTime) {
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: 'Already checked in today'
+        message: `Already checked in today at ${existingAttendance.checkInTime.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        })}. Multiple check-ins are not allowed.`
       }, { status: 400 });
     }
 
@@ -170,25 +196,28 @@ export async function POST(request: NextRequest) {
     const isLate = isLateCheckIn(checkInTime, shiftTimings.startTime);
     
     // If late and no reason provided, require reason
-    if (isLate && !lateCheckInReason) {
+    if (isLate && (!lateCheckInReason || lateCheckInReason.trim() === '')) {
+      const lateMinutes = Math.round((checkInTime.getTime() - shiftTimings.startTime.getTime()) / (1000 * 60));
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: 'Late check-in reason is required when checking in more than 15 minutes after shift start'
+        message: `You are ${lateMinutes} minutes late. Please provide a reason for late check-in.`
       }, { status: 400 });
     }
 
     let attendance: IAttendanceDocument;
 
-    if (existingAttendance) {
-      // Update existing record with check-in
+    if (existingAttendance && !existingAttendance.checkInTime) {
+      // Update existing record with check-in (this case should rarely happen)
       attendance = await Attendance.findByIdAndUpdate(
         existingAttendance._id,
         {
+          shift,
           checkInTime,
           status: 'partial', // Will be updated to 'present' when checked out
           isLateCheckIn: isLate,
-          lateCheckInReason: isLate ? lateCheckInReason : undefined,
-          'location.checkInLocation': location
+          lateCheckInReason: isLate ? lateCheckInReason?.trim() : undefined,
+          'location.checkInLocation': location,
+          totalWorkingHours: 0 // Reset working hours
         },
         { new: true }
       ) as IAttendanceDocument;
@@ -204,7 +233,7 @@ export async function POST(request: NextRequest) {
         checkInTime,
         status: 'partial',
         isLateCheckIn: isLate,
-        lateCheckInReason: isLate ? lateCheckInReason : undefined,
+        lateCheckInReason: isLate ? lateCheckInReason?.trim() : undefined,
         isEarlyCheckOut: false,
         totalWorkingHours: 0,
         breaks: [],
@@ -218,6 +247,16 @@ export async function POST(request: NextRequest) {
       attendance = await Attendance.create(attendanceData) as IAttendanceDocument;
     }
 
+    const lateMinutes = isLate ? Math.round((checkInTime.getTime() - shiftTimings.startTime.getTime()) / (1000 * 60)) : 0;
+    
+    const successMessage = isLate 
+      ? `Checked in successfully (Late by ${lateMinutes} minutes)`
+      : 'Checked in successfully';
+
+    const welcomeMessage = isLate 
+      ? 'You have checked in late. Please ensure to arrive on time in the future.'
+      : `Welcome! Your ${shift} shift has started. Have a productive day!`;
+
     return NextResponse.json<IAttendanceApiResponse<{
       attendance: IAttendance;
       message: string;
@@ -225,17 +264,17 @@ export async function POST(request: NextRequest) {
         startTime: Date;
         endTime: Date;
       };
+      isLate: boolean;
+      lateMinutes?: number;
     }>>({
       success: true,
-      message: isLate 
-        ? `Checked in successfully (Late by ${Math.round((checkInTime.getTime() - shiftTimings.startTime.getTime()) / (1000 * 60))} minutes)`
-        : 'Checked in successfully',
+      message: successMessage,
       data: {
         attendance: convertToIAttendance(attendance),
-        message: isLate 
-          ? 'You have checked in late. Please ensure to arrive on time in the future.'
-          : 'Welcome! Your shift has started.',
-        shiftTimings
+        message: welcomeMessage,
+        shiftTimings,
+        isLate,
+        lateMinutes: isLate ? lateMinutes : undefined
       }
     }, { status: 201 });
 
@@ -249,7 +288,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - Get today's check-in status
+// GET - Get today's check-in status and details
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -267,14 +306,18 @@ export async function GET(request: NextRequest) {
     if (!todaysAttendance) {
       return NextResponse.json<IAttendanceApiResponse<{
         hasCheckedIn: boolean;
+        hasCheckedOut: boolean;
         canCheckIn: boolean;
+        currentWorkingHours: number;
         message: string;
       }>>({
         success: true,
         message: 'No attendance record for today',
         data: {
           hasCheckedIn: false,
+          hasCheckedOut: false,
           canCheckIn: true,
+          currentWorkingHours: 0,
           message: 'Ready to check in'
         }
       });
@@ -284,28 +327,62 @@ export async function GET(request: NextRequest) {
     const hasCheckedOut = !!todaysAttendance.checkOutTime;
     const isOnBreak = todaysAttendance.isCurrentlyOnBreak();
 
-    return NextResponse.json<IAttendanceApiResponse<{
-      hasCheckedIn: boolean;
-      hasCheckedOut: boolean;
-      isOnBreak: boolean;
-      canCheckIn: boolean;
-      canCheckOut: boolean;
-      attendance: IAttendance;
-      currentWorkingHours: number;
-    }>>({
+    // Calculate current working hours if checked in but not out
+    let currentWorkingHours = todaysAttendance.totalWorkingHours;
+    if (hasCheckedIn && !hasCheckedOut && todaysAttendance.checkInTime) {
+      const now = new Date();
+      const grossMinutes = Math.round((now.getTime() - todaysAttendance.checkInTime.getTime()) / (1000 * 60));
+      const breakTime = todaysAttendance.calculateBreakTime();
+      const namazBreakTime = todaysAttendance.calculateNamazBreakTime();
+      
+      // Calculate ongoing break time
+      const ongoingBreakTime = todaysAttendance.breaks.filter(b => b.isActive).reduce((total, b) => {
+        return total + Math.round((now.getTime() - b.startTime.getTime()) / (1000 * 60));
+      }, 0);
+      
+      const ongoingNamazTime = todaysAttendance.namazBreaks.filter(nb => nb.isActive).reduce((total, nb) => {
+        return total + Math.round((now.getTime() - nb.startTime.getTime()) / (1000 * 60));
+      }, 0);
+      
+      currentWorkingHours = Math.max(0, grossMinutes - breakTime - namazBreakTime - ongoingBreakTime - ongoingNamazTime);
+    }
+
+    // Prepare today's attendance data with safe access
+    const todaysData: ITodaysAttendance = {
+      hasCheckedIn,
+      hasCheckedOut,
+      currentStatus: todaysAttendance.status as any,
+      attendance: convertToIAttendance(todaysAttendance),
+      activeBreaks: todaysAttendance.breaks.filter(b => b.isActive).map(b => ({
+        id: b.id,
+        attendanceId: todaysAttendance._id?.toString() || '',
+        breakType: b.breakType as any,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        duration: b.duration,
+        reason: b.reason,
+        isActive: b.isActive,
+        createdAt: b.createdAt
+      })),
+      activeNamazBreaks: todaysAttendance.namazBreaks.filter(nb => nb.isActive).map(nb => ({
+        id: nb.id,
+        attendanceId: todaysAttendance._id?.toString() || '',
+        namazType: nb.namazType as any,
+        startTime: nb.startTime,
+        endTime: nb.endTime,
+        duration: nb.duration,
+        isActive: nb.isActive,
+        createdAt: nb.createdAt
+      })),
+      totalWorkingHours: currentWorkingHours,
+      totalBreakTime: todaysAttendance.calculateBreakTime() + todaysAttendance.calculateNamazBreakTime(),
+      remainingWorkingHours: Math.max(0, 480 - currentWorkingHours) // 8 hours = 480 minutes
+    };
+
+    return NextResponse.json<IAttendanceApiResponse<ITodaysAttendance>>({
       success: true,
       message: 'Today\'s attendance status retrieved successfully',
-      data: {
-        hasCheckedIn,
-        hasCheckedOut,
-        isOnBreak,
-        canCheckIn: !hasCheckedIn,
-        canCheckOut: hasCheckedIn && !hasCheckedOut && !isOnBreak,
-        attendance: convertToIAttendance(todaysAttendance),
-        currentWorkingHours: hasCheckedIn && !hasCheckedOut 
-          ? Math.round((new Date().getTime() - todaysAttendance.checkInTime!.getTime()) / (1000 * 60))
-          : todaysAttendance.totalWorkingHours
-      }
+      data: todaysData
     });
 
   } catch (error) {

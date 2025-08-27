@@ -24,7 +24,7 @@ export default function HeaderProfile({ session }: HeaderProfileProps) {
   }, []);
 
   const handleLogout = async () => {
-    await signOut({ callbackUrl: '/auth/login' });
+    await signOut({ callbackUrl: '/auth/employee/login' });
   };
 
   // Get user initials safely

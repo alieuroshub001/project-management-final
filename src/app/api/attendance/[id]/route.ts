@@ -99,6 +99,14 @@ export async function GET(
     // Await params before using them
     const params = await context.params;
 
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json<IAttendanceApiResponse>({
+        success: false,
+        message: 'Invalid attendance ID format'
+      }, { status: 400 });
+    }
+
     const attendance = await Attendance.findById(params.id) as IAttendanceDocument | null;
     if (!attendance) {
       return NextResponse.json<IAttendanceApiResponse>({
@@ -149,6 +157,14 @@ export async function PUT(
 
     // Await params before using them
     const params = await context.params;
+
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json<IAttendanceApiResponse>({
+        success: false,
+        message: 'Invalid attendance ID format'
+      }, { status: 400 });
+    }
 
     const attendance = await Attendance.findById(params.id) as IAttendanceDocument | null;
     if (!attendance) {
@@ -277,6 +293,14 @@ export async function DELETE(
 
     // Await params before using them
     const params = await context.params;
+
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return NextResponse.json<IAttendanceApiResponse>({
+        success: false,
+        message: 'Invalid attendance ID format'
+      }, { status: 400 });
+    }
 
     const attendance = await Attendance.findById(params.id) as IAttendanceDocument | null;
     if (!attendance) {

@@ -23,15 +23,31 @@ import {
   Loader2,
   Plus,
   Minus,
-  Edit3
+  Edit3,
+  AlertTriangle,
+  Info,
+  X
 } from 'lucide-react';
 
 interface AttendanceCheckInOutProps {
   onSuccess?: () => void;
 }
 
+// Safe default structure for todaysAttendance
+const getDefaultTodaysAttendance = (): ITodaysAttendance => ({
+  hasCheckedIn: false,
+  hasCheckedOut: false,
+  currentStatus: 'absent',
+  attendance: undefined,
+  activeBreaks: [],
+  activeNamazBreaks: [],
+  totalWorkingHours: 0,
+  totalBreakTime: 0,
+  remainingWorkingHours: 0
+});
+
 export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOutProps) {
-  const [todaysAttendance, setTodaysAttendance] = useState<ITodaysAttendance | null>(null);
+  const [todaysAttendance, setTodaysAttendance] = useState<ITodaysAttendance>(getDefaultTodaysAttendance());
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
@@ -45,11 +61,18 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
   });
   const [lateReason, setLateReason] = useState('');
   const [earlyReason, setEarlyReason] = useState('');
+  const [showLateReasonInput, setShowLateReasonInput] = useState(false);
+  const [showEarlyReasonInput, setShowEarlyReasonInput] = useState(false);
+  const [isLateCheckIn, setIsLateCheckIn] = useState(false);
+  const [isEarlyCheckOut, setIsEarlyCheckOut] = useState(false);
   
   // Check-out form state
   const [tasksPerformed, setTasksPerformed] = useState([
     { taskDescription: '', timeSpent: 0, taskCategory: 'development' as const, priority: 'medium' as const, notes: '' }
   ]);
+  const [taskValidationErrors, setTaskValidationErrors] = useState<string[]>([]);
+  const [totalTaskTime, setTotalTaskTime] = useState(0);
+  const [expectedWorkingTime, setExpectedWorkingTime] = useState(0);
 
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -60,17 +83,176 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
     { value: 'random' as ShiftType, label: 'Flexible Hours', time: 'Custom timing', icon: Shuffle, color: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300' }
   ];
 
+  // Helper function to check if current time is late for shift
+  const checkIfLateCheckIn = (shift: ShiftType, customStartTime?: string) => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    let shiftStartMinutes = 0;
+    
+    switch (shift) {
+      case 'morning':
+        shiftStartMinutes = 8 * 60; // 8:00 AM
+        break;
+      case 'evening':
+        shiftStartMinutes = 16 * 60; // 4:00 PM
+        break;
+      case 'night':
+        shiftStartMinutes = 0; // 12:00 AM
+        break;
+      case 'random':
+        if (customStartTime) {
+          const [hours, minutes] = customStartTime.split(':').map(Number);
+          shiftStartMinutes = hours * 60 + minutes;
+        }
+        break;
+    }
+    
+    const graceMinutes = 15;
+    return currentMinutes > (shiftStartMinutes + graceMinutes);
+  };
+
+  // Helper function to check if current time is early for checkout
+  const checkIfEarlyCheckOut = () => {
+    if (!todaysAttendance.attendance?.checkInTime) return false;
+    
+    const checkInTime = new Date(todaysAttendance.attendance.checkInTime);
+    const now = new Date();
+    const workingMinutes = (now.getTime() - checkInTime.getTime()) / (1000 * 60);
+    const minWorkingMinutes = 8 * 60; // 8 hours
+    
+    return workingMinutes < (minWorkingMinutes - 15); // 15 minute grace period
+  };
+
+  // Calculate expected working time
+  const calculateExpectedWorkingTime = () => {
+    if (!todaysAttendance.attendance?.checkInTime) return 0;
+    
+    const checkInTime = new Date(todaysAttendance.attendance.checkInTime);
+    const now = new Date();
+    const grossMinutes = Math.round((now.getTime() - checkInTime.getTime()) / (1000 * 60));
+    const breakTime = todaysAttendance.totalBreakTime || 0;
+    
+    return Math.max(0, grossMinutes - breakTime);
+  };
+
+  // Validate tasks
+  const validateTasks = () => {
+    const errors: string[] = [];
+    let totalTime = 0;
+    
+    // Check if tasks are provided
+    if (tasksPerformed.length === 0) {
+      errors.push('At least one task is required');
+      return errors;
+    }
+    
+    // Validate each task
+    tasksPerformed.forEach((task, index) => {
+      if (!task.taskDescription.trim()) {
+        errors.push(`Task ${index + 1}: Description is required`);
+      }
+      if (task.timeSpent <= 0) {
+        errors.push(`Task ${index + 1}: Time spent must be greater than 0`);
+      }
+      totalTime += task.timeSpent;
+    });
+    
+    // Check if total task time is reasonable
+    const expectedTime = calculateExpectedWorkingTime();
+    const timeDifference = Math.abs(totalTime - expectedTime);
+    const allowedVariance = Math.max(60, expectedTime * 0.2); // 20% variance or 60 minutes minimum
+    
+    if (expectedTime > 0 && timeDifference > allowedVariance) {
+      if (totalTime > expectedTime) {
+        errors.push(`Total task time (${formatDuration(totalTime)}) exceeds working time (${formatDuration(expectedTime)}). Please adjust your tasks.`);
+      } else {
+        errors.push(`Total task time (${formatDuration(totalTime)}) is significantly less than working time (${formatDuration(expectedTime)}). Please account for all work done.`);
+      }
+    }
+    
+    if (totalTime < 30) {
+      errors.push('Total task time should be at least 30 minutes');
+    }
+    
+    return errors;
+  };
+
   const fetchTodaysAttendance = async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/attendance/checkin');
       const data = await response.json();
 
-      if (response.ok) {
-        setTodaysAttendance(data.data);
+      if (response.ok && data.success) {
+        const attendanceData = data.data || {};
+        
+        // Create a properly structured todaysAttendance object with safe defaults
+        const safeAttendanceData: ITodaysAttendance = {
+          hasCheckedIn: attendanceData.hasCheckedIn || false,
+          hasCheckedOut: attendanceData.hasCheckedOut || false,
+          currentStatus: attendanceData.attendance?.status || 'absent',
+          attendance: attendanceData.attendance || undefined,
+          activeBreaks: [],
+          activeNamazBreaks: [],
+          totalWorkingHours: attendanceData.currentWorkingHours || 0,
+          totalBreakTime: 0,
+          remainingWorkingHours: Math.max(0, 480 - (attendanceData.currentWorkingHours || 0))
+        };
+
+        // Safely populate active breaks
+        if (attendanceData.attendance?.breaks) {
+          safeAttendanceData.activeBreaks = attendanceData.attendance.breaks.filter((b: any) => b.isActive) || [];
+        }
+
+        if (attendanceData.attendance?.namazBreaks) {
+          safeAttendanceData.activeNamazBreaks = attendanceData.attendance.namazBreaks.filter((nb: any) => nb.isActive) || [];
+        }
+
+        // Calculate total break time for active breaks
+        const breakTime = safeAttendanceData.activeBreaks.reduce((total, b) => {
+          if (b.startTime) {
+            const duration = Math.round((new Date().getTime() - new Date(b.startTime).getTime()) / (1000 * 60));
+            return total + duration;
+          }
+          return total;
+        }, 0);
+
+        const namazBreakTime = safeAttendanceData.activeNamazBreaks.reduce((total, nb) => {
+          if (nb.startTime) {
+            const duration = Math.round((new Date().getTime() - new Date(nb.startTime).getTime()) / (1000 * 60));
+            return total + duration;
+          }
+          return total;
+        }, 0);
+
+        // Add completed break times
+        const completedBreakTime = attendanceData.attendance?.breaks?.reduce((total: number, b: any) => {
+          return total + (b.duration || 0);
+        }, 0) || 0;
+
+        const completedNamazTime = attendanceData.attendance?.namazBreaks?.reduce((total: number, nb: any) => {
+          return total + (nb.duration || 0);
+        }, 0) || 0;
+
+        safeAttendanceData.totalBreakTime = breakTime + namazBreakTime + completedBreakTime + completedNamazTime;
+
+        // Update current working hours if checked in but not out
+        if (safeAttendanceData.hasCheckedIn && !safeAttendanceData.hasCheckedOut && safeAttendanceData.attendance?.checkInTime) {
+          const checkInTime = new Date(safeAttendanceData.attendance.checkInTime);
+          const now = new Date();
+          const grossMinutes = Math.round((now.getTime() - checkInTime.getTime()) / (1000 * 60));
+          safeAttendanceData.totalWorkingHours = Math.max(0, grossMinutes - safeAttendanceData.totalBreakTime);
+          safeAttendanceData.remainingWorkingHours = Math.max(0, 480 - safeAttendanceData.totalWorkingHours);
+        }
+
+        setTodaysAttendance(safeAttendanceData);
+      } else {
+        setTodaysAttendance(getDefaultTodaysAttendance());
       }
     } catch (err) {
       console.error('Failed to fetch today\'s attendance:', err);
+      setTodaysAttendance(getDefaultTodaysAttendance());
     } finally {
       setLoading(false);
     }
@@ -82,10 +264,60 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
     // Update current time every minute
     const interval = setInterval(() => {
         setCurrentTime(new Date());
+        
+        // Check if check-in would be late
+        if (!todaysAttendance.hasCheckedIn) {
+          const wouldBeLate = checkIfLateCheckIn(selectedShift, customTimes.startTime);
+          setIsLateCheckIn(wouldBeLate);
+          setShowLateReasonInput(wouldBeLate);
+        }
+        
+        // Check if check-out would be early
+        if (todaysAttendance.hasCheckedIn && !todaysAttendance.hasCheckedOut) {
+          const wouldBeEarly = checkIfEarlyCheckOut();
+          setIsEarlyCheckOut(wouldBeEarly);
+          setShowEarlyReasonInput(wouldBeEarly);
+          
+          // Update expected working time
+          const expectedTime = calculateExpectedWorkingTime();
+          setExpectedWorkingTime(expectedTime);
+        }
     }, 60000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedShift, customTimes.startTime, todaysAttendance.hasCheckedIn, todaysAttendance.hasCheckedOut]);
+
+  // Update task calculations when tasks change
+  useEffect(() => {
+    const total = tasksPerformed.reduce((sum, task) => sum + (task.timeSpent || 0), 0);
+    setTotalTaskTime(total);
+    
+    // Clear task validation errors when tasks are updated
+    if (taskValidationErrors.length > 0) {
+      setTaskValidationErrors([]);
+    }
+  }, [tasksPerformed]);
+
+  // Check late/early status when shift or time changes
+  useEffect(() => {
+    if (!todaysAttendance.hasCheckedIn) {
+      const wouldBeLate = checkIfLateCheckIn(selectedShift, customTimes.startTime);
+      setIsLateCheckIn(wouldBeLate);
+      setShowLateReasonInput(wouldBeLate);
+    }
+  }, [selectedShift, customTimes.startTime, todaysAttendance.hasCheckedIn]);
+
+  useEffect(() => {
+    if (todaysAttendance.hasCheckedIn && !todaysAttendance.hasCheckedOut) {
+      const wouldBeEarly = checkIfEarlyCheckOut();
+      setIsEarlyCheckOut(wouldBeEarly);
+      setShowEarlyReasonInput(wouldBeEarly);
+      
+      // Update expected working time
+      const expectedTime = calculateExpectedWorkingTime();
+      setExpectedWorkingTime(expectedTime);
+    }
+  }, [todaysAttendance.hasCheckedIn, todaysAttendance.hasCheckedOut, todaysAttendance.totalBreakTime]);
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', { 
@@ -102,6 +334,12 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
   };
 
   const handleCheckIn = async () => {
+    // Validate late reason if needed
+    if (isLateCheckIn && !lateReason.trim()) {
+      setError('Please provide a reason for late check-in');
+      return;
+    }
+
     setActionLoading(true);
     setError('');
     setSuccess('');
@@ -129,6 +367,7 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
       }
 
       setSuccess('Checked in successfully!');
+      setLateReason('');
       fetchTodaysAttendance();
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -139,13 +378,25 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
   };
 
   const handleCheckOut = async () => {
-    if (tasksPerformed.some(task => !task.taskDescription.trim() || task.timeSpent <= 0)) {
-      setError('Please provide all task descriptions and time spent');
+    // Clear previous errors
+    setError('');
+    setTaskValidationErrors([]);
+
+    // Validate tasks
+    const errors = validateTasks();
+    if (errors.length > 0) {
+      setTaskValidationErrors(errors);
+      setError('Please fix the following issues with your tasks before checking out');
+      return;
+    }
+
+    // Validate early reason if needed
+    if (isEarlyCheckOut && !earlyReason.trim()) {
+      setError('Please provide a reason for early check-out');
       return;
     }
 
     setActionLoading(true);
-    setError('');
     setSuccess('');
 
     try {
@@ -173,6 +424,7 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
       }
 
       setSuccess('Checked out successfully!');
+      setEarlyReason('');
       fetchTodaysAttendance();
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -234,6 +486,10 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
     ));
   };
 
+  // Safe access to arrays
+  const activeBreaks = todaysAttendance?.activeBreaks || [];
+  const activeNamazBreaks = todaysAttendance?.activeNamazBreaks || [];
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -269,8 +525,8 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
             </div>
             <p className="font-medium text-gray-900 dark:text-white">Check In</p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {todaysAttendance?.hasCheckedIn 
-                ? formatTime(new Date(todaysAttendance.attendance!.checkInTime!))
+              {todaysAttendance?.hasCheckedIn && todaysAttendance?.attendance?.checkInTime
+                ? formatTime(new Date(todaysAttendance.attendance.checkInTime))
                 : 'Not checked in'
               }
             </p>
@@ -290,8 +546,8 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
             </div>
             <p className="font-medium text-gray-900 dark:text-white">Check Out</p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {todaysAttendance?.hasCheckedOut 
-                ? formatTime(new Date(todaysAttendance.attendance!.checkOutTime!))
+              {todaysAttendance?.hasCheckedOut && todaysAttendance?.attendance?.checkOutTime
+                ? formatTime(new Date(todaysAttendance.attendance.checkOutTime))
                 : 'Not checked out'
               }
             </p>
@@ -309,12 +565,26 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Global Messages */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
-          <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-3" />
-            <p className="text-red-700 dark:text-red-300">{error}</p>
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-red-700 dark:text-red-300">{error}</p>
+              
+              {/* Task validation errors */}
+              {taskValidationErrors.length > 0 && (
+                <ul className="mt-3 space-y-2">
+                  {taskValidationErrors.map((taskError, index) => (
+                    <li key={index} className="text-sm text-red-600 dark:text-red-400 flex items-center">
+                      <X className="w-3 h-3 mr-2 flex-shrink-0" />
+                      {taskError}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -403,25 +673,32 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
             </div>
           )}
 
-          {/* Late Reason Input */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Late Check-in Reason (if applicable)
-            </label>
-            <textarea
-              value={lateReason}
-              onChange={(e) => setLateReason(e.target.value)}
-              placeholder="Please provide reason if you're checking in late..."
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
-              rows={2}
-            />
-          </div>
+          {/* Late Check-in Warning and Reason */}
+          {showLateReasonInput && (
+            <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="flex items-center mb-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-2" />
+                <h3 className="font-medium text-amber-800 dark:text-amber-300">Late Check-in Detected</h3>
+              </div>
+              <p className="text-sm text-amber-700 dark:text-amber-400 mb-3">
+                You're checking in after the scheduled start time. Please provide a reason.
+              </p>
+              <textarea
+                value={lateReason}
+                onChange={(e) => setLateReason(e.target.value)}
+                placeholder="Please provide reason for late check-in..."
+                className="w-full rounded-lg border border-amber-300 dark:border-amber-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white focus:border-amber-500 focus:ring-amber-500"
+                rows={2}
+                required
+              />
+            </div>
+          )}
 
           <button
             onClick={handleCheckIn}
-            disabled={actionLoading || (selectedShift === 'random' && (!customTimes.startTime || !customTimes.endTime))}
+            disabled={actionLoading || (selectedShift === 'random' && (!customTimes.startTime || !customTimes.endTime)) || (isLateCheckIn && !lateReason.trim())}
             className={`w-full px-6 py-3 rounded-xl font-medium transition-colors ${
-              actionLoading 
+              actionLoading || (isLateCheckIn && !lateReason.trim())
                 ? 'bg-gray-400 cursor-not-allowed text-white' 
                 : 'bg-green-600 hover:bg-green-700 text-white'
             }`}
@@ -432,7 +709,11 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
                 Checking In...
               </div>
             ) : (
-              'Check In'
+              <div className="flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Check In
+                {isLateCheckIn && <span className="ml-2 text-sm">(Late)</span>}
+              </div>
             )}
           </button>
         </div>
@@ -451,9 +732,9 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
                 General Breaks
               </h3>
               
-              {todaysAttendance.activeBreaks.length > 0 ? (
+              {activeBreaks.length > 0 ? (
                 <div className="space-y-2">
-                  {todaysAttendance.activeBreaks.map((breakItem) => (
+                  {activeBreaks.map((breakItem) => (
                     <div key={breakItem.id} className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <div>
@@ -496,9 +777,9 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
                 Namaz Breaks
               </h3>
               
-              {todaysAttendance.activeNamazBreaks.length > 0 ? (
+              {activeNamazBreaks.length > 0 ? (
                 <div className="space-y-2">
-                  {todaysAttendance.activeNamazBreaks.map((namazBreak) => (
+                  {activeNamazBreaks.map((namazBreak) => (
                     <div key={namazBreak.id} className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <div>
@@ -542,6 +823,35 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Check Out</h2>
           
+          {/* Time Summary */}
+          {expectedWorkingTime > 0 && (
+            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <h3 className="font-medium text-blue-800 dark:text-blue-300 mb-2">Time Summary</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-blue-600 dark:text-blue-400">Expected Working Time:</span>
+                  <p className="font-medium text-blue-800 dark:text-blue-300">
+                    {formatDuration(expectedWorkingTime)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-blue-600 dark:text-blue-400">Total Task Time:</span>
+                  <p className={`font-medium ${
+                    Math.abs(totalTaskTime - expectedWorkingTime) > Math.max(60, expectedWorkingTime * 0.2)
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-green-600 dark:text-green-400'
+                  }`}>
+                    {formatDuration(totalTaskTime)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                <Info className="w-3 h-3 inline mr-1" />
+                Task time should approximately match your working time
+              </div>
+            </div>
+          )}
+          
           {/* Tasks Performed */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -563,7 +873,7 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
                     {tasksPerformed.length > 1 && (
                       <button
                         onClick={() => removeTask(index)}
-                        className="text-red-500 hover:text-red-700 dark:hover:text-red-300"
+                        className="text-red-500 hover:text-red-700 dark:hover:text-red-300 p-1 rounded"
                       >
                         <Minus className="w-4 h-4" />
                       </button>
@@ -572,7 +882,9 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                     <div>
-                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Task Description</label>
+                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                        Task Description <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="text"
                         value={task.taskDescription}
@@ -583,7 +895,9 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
                     </div>
                     
                     <div>
-                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Time Spent (minutes)</label>
+                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                        Time Spent (minutes) <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="number"
                         value={task.timeSpent}
@@ -646,25 +960,32 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
             </div>
           </div>
 
-          {/* Early Check-out Reason */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Early Check-out Reason (if applicable)
-            </label>
-            <textarea
-              value={earlyReason}
-              onChange={(e) => setEarlyReason(e.target.value)}
-              placeholder="Please provide reason if you're checking out early..."
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
-              rows={2}
-            />
-          </div>
+          {/* Early Check-out Warning and Reason */}
+          {showEarlyReasonInput && (
+            <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+              <div className="flex items-center mb-3">
+                <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400 mr-2" />
+                <h3 className="font-medium text-orange-800 dark:text-orange-300">Early Check-out Detected</h3>
+              </div>
+              <p className="text-sm text-orange-700 dark:text-orange-400 mb-3">
+                You're checking out before completing your full shift. Please provide a reason.
+              </p>
+              <textarea
+                value={earlyReason}
+                onChange={(e) => setEarlyReason(e.target.value)}
+                placeholder="Please provide reason for early check-out..."
+                className="w-full rounded-lg border border-orange-300 dark:border-orange-600 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-white focus:border-orange-500 focus:ring-orange-500"
+                rows={2}
+                required
+              />
+            </div>
+          )}
 
           <button
             onClick={handleCheckOut}
-            disabled={actionLoading || todaysAttendance.activeBreaks.length > 0 || todaysAttendance.activeNamazBreaks.length > 0}
+            disabled={actionLoading || activeBreaks.length > 0 || activeNamazBreaks.length > 0}
             className={`w-full px-6 py-3 rounded-xl font-medium transition-colors ${
-              actionLoading || todaysAttendance.activeBreaks.length > 0 || todaysAttendance.activeNamazBreaks.length > 0
+              actionLoading || activeBreaks.length > 0 || activeNamazBreaks.length > 0
                 ? 'bg-gray-400 cursor-not-allowed text-white' 
                 : 'bg-blue-600 hover:bg-blue-700 text-white'
             }`}
@@ -675,11 +996,15 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
                 Checking Out...
               </div>
             ) : (
-              'Check Out'
+              <div className="flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Check Out
+                {isEarlyCheckOut && <span className="ml-2 text-sm">(Early)</span>}
+              </div>
             )}
           </button>
 
-          {(todaysAttendance.activeBreaks.length > 0 || todaysAttendance.activeNamazBreaks.length > 0) && (
+          {(activeBreaks.length > 0 || activeNamazBreaks.length > 0) && (
             <p className="text-sm text-amber-600 dark:text-amber-400 text-center mt-2">
               Please end all active breaks before checking out
             </p>

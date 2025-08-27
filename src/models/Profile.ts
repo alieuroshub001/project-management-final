@@ -505,38 +505,39 @@ const EmployeeProfileSchema: Schema<IEmployeeProfileDocument> = new Schema({
       default: false
     }
   }],
+  // FIXED: Made all file upload fields optional by removing required: true
   profileImage: {
-    public_id: { type: String, required: true },
-    secure_url: { type: String, required: true },
-    format: { type: String, required: true },
-    resource_type: { type: String, required: true },
-    bytes: { type: Number, required: true },
+    public_id: { type: String },
+    secure_url: { type: String },
+    format: { type: String },
+    resource_type: { type: String },
+    bytes: { type: Number },
     width: { type: Number },
     height: { type: Number },
-    original_filename: { type: String, required: true },
-    created_at: { type: String, required: true }
+    original_filename: { type: String },
+    created_at: { type: String }
   },
   coverImage: {
-    public_id: { type: String, required: true },
-    secure_url: { type: String, required: true },
-    format: { type: String, required: true },
-    resource_type: { type: String, required: true },
-    bytes: { type: Number, required: true },
+    public_id: { type: String },
+    secure_url: { type: String },
+    format: { type: String },
+    resource_type: { type: String },
+    bytes: { type: Number },
     width: { type: Number },
     height: { type: Number },
-    original_filename: { type: String, required: true },
-    created_at: { type: String, required: true }
+    original_filename: { type: String },
+    created_at: { type: String }
   },
   resume: {
-    public_id: { type: String, required: true },
-    secure_url: { type: String, required: true },
-    format: { type: String, required: true },
-    resource_type: { type: String, required: true },
-    bytes: { type: Number, required: true },
+    public_id: { type: String },
+    secure_url: { type: String },
+    format: { type: String },
+    resource_type: { type: String },
+    bytes: { type: Number },
     width: { type: Number },
     height: { type: Number },
-    original_filename: { type: String, required: true },
-    created_at: { type: String, required: true }
+    original_filename: { type: String },
+    created_at: { type: String }
   },
   isProfileComplete: {
     type: Boolean,
@@ -652,7 +653,7 @@ EmployeeProfileSchema.methods.calculateCompletionPercentage = function(): number
   if (this.emergencyContacts && this.emergencyContacts.length > 0) completed++;
   
   // Profile Image (1 field)
-  if (this.profileImage) completed++;
+  if (this.profileImage && this.profileImage.secure_url) completed++;
   
   return Math.round((completed / totalFields) * 100);
 };

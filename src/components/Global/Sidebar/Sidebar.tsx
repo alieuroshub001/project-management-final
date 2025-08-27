@@ -17,8 +17,7 @@ export default function Sidebar() {
           href="/employee/dashboard" 
           className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-1'}`}
         >
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">PM</span>
+          <div className="w-2 h-2 bg-cyan-600 rounded-lg flex items-center justify-center">
           </div>
           {!isCollapsed && (
             <span className="text-xl font-bold text-gray-900 dark:text-white">

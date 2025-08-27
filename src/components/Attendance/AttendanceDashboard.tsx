@@ -13,7 +13,8 @@ import {
   Activity,
   TrendingUp,
   User,
-  MapPin
+  MapPin,
+  RefreshCw
 } from 'lucide-react';
 
 export default function AttendanceDashboard() {
@@ -21,10 +22,13 @@ export default function AttendanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (showRefreshing = false) => {
     try {
-      setLoading(true);
+      if (showRefreshing) setRefreshing(true);
+      else setLoading(true);
+      
       const response = await fetch('/api/attendance/dashboard');
       const data = await response.json();
 
@@ -33,22 +37,32 @@ export default function AttendanceDashboard() {
       }
 
       setDashboardData(data.data);
+      setError('');
     } catch (err) {
+      console.error('Dashboard fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchDashboardData();
     
-    // Update current time every minute
-    const interval = setInterval(() => {
+    // Update current time every minute and refresh data every 5 minutes
+    const timeInterval = setInterval(() => {
       setCurrentTime(new Date());
     }, 60000);
 
-    return () => clearInterval(interval);
+    const dataInterval = setInterval(() => {
+      fetchDashboardData(true);
+    }, 5 * 60000); // 5 minutes
+
+    return () => {
+      clearInterval(timeInterval);
+      clearInterval(dataInterval);
+    };
   }, []);
 
   const formatTime = (date: Date) => {
@@ -60,12 +74,30 @@ export default function AttendanceDashboard() {
   };
 
   const formatDuration = (minutes: number) => {
+    if (minutes === 0) return '0h 0m';
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return `${hours}h ${mins}m`;
   };
 
-  if (loading) {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'present':
+        return 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20';
+      case 'partial':
+        return 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/20';
+      case 'absent':
+        return 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20';
+      default:
+        return 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700';
+    }
+  };
+
+  const handleRefresh = () => {
+    fetchDashboardData(true);
+  };
+
+  if (loading && !dashboardData) {
     return (
       <div className="flex justify-center py-12">
         <LoadingSpinner size="lg" />
@@ -73,19 +105,21 @@ export default function AttendanceDashboard() {
     );
   }
 
-  if (error) {
+  if (error && !dashboardData) {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
-        <div className="flex items-center">
-          <AlertTriangle className="w-5 h-5 text-red-500 mr-3" />
-          <p className="text-red-700 dark:text-red-300">{error}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <AlertTriangle className="w-5 h-5 text-red-500 mr-3" />
+            <p className="text-red-700 dark:text-red-300">{error}</p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
+            Try again
+          </button>
         </div>
-        <button
-          onClick={fetchDashboardData}
-          className="mt-3 px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-        >
-          Try again
-        </button>
       </div>
     );
   }
@@ -96,15 +130,31 @@ export default function AttendanceDashboard() {
 
   return (
     <div className="space-y-8">
+      {/* Header with Refresh */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Overview</h2>
+          <p className="text-gray-600 dark:text-gray-400">Current time: {formatTime(currentTime)}</p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
       {/* Today's Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Current Status Card */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Today's Status</h2>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              {formatTime(currentTime)}
-            </div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Today's Status</h3>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(todaysAttendance.currentStatus)}`}>
+              {todaysAttendance.currentStatus.charAt(0).toUpperCase() + todaysAttendance.currentStatus.slice(1)}
+            </span>
           </div>
 
           <div className="space-y-6">
@@ -180,16 +230,21 @@ export default function AttendanceDashboard() {
                 <div>
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Total Working Hours</p>
                   <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                    {formatDuration(todaysAttendance.totalWorkingHours)}
+                    {formatDuration(todaysAttendance.totalWorkingHours || 0)}
+                  </p>
+                  <p className="text-xs text-indigo-600 dark:text-indigo-400">
+                    Break time: {formatDuration(todaysAttendance.totalBreakTime || 0)}
                   </p>
                 </div>
-                <Activity className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-800/30 rounded-lg">
+                  <Activity className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                </div>
               </div>
               
               {todaysAttendance.hasCheckedIn && !todaysAttendance.hasCheckedOut && (
                 <div className="mt-3 pt-3 border-t border-indigo-200 dark:border-indigo-800">
                   <p className="text-xs text-indigo-600 dark:text-indigo-400">
-                    • Remaining: {formatDuration(todaysAttendance.remainingWorkingHours)}
+                    • Remaining: {formatDuration(todaysAttendance.remainingWorkingHours || 0)}
                   </p>
                 </div>
               )}
@@ -199,11 +254,11 @@ export default function AttendanceDashboard() {
 
         {/* Break Status */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Break Status</h2>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Break Status</h3>
           
           <div className="space-y-4">
             {/* Active Breaks */}
-            {todaysAttendance.activeBreaks.length > 0 && (
+            {todaysAttendance.activeBreaks && todaysAttendance.activeBreaks.length > 0 && (
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
                 <div className="flex items-center mb-3">
                   <Coffee className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-2" />
@@ -219,7 +274,7 @@ export default function AttendanceDashboard() {
             )}
 
             {/* Active Namaz Breaks */}
-            {todaysAttendance.activeNamazBreaks.length > 0 && (
+            {todaysAttendance.activeNamazBreaks && todaysAttendance.activeNamazBreaks.length > 0 && (
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
                 <div className="flex items-center mb-3">
                   <Moon className="w-5 h-5 text-green-600 dark:text-green-400 mr-2" />
@@ -238,11 +293,13 @@ export default function AttendanceDashboard() {
             <div className="flex items-center justify-between py-2">
               <span className="text-sm text-gray-600 dark:text-gray-400">Total Break Time Today</span>
               <span className="font-medium text-gray-900 dark:text-white">
-                {formatDuration(todaysAttendance.totalBreakTime)}
+                {formatDuration(todaysAttendance.totalBreakTime || 0)}
               </span>
             </div>
 
-            {todaysAttendance.activeBreaks.length === 0 && todaysAttendance.activeNamazBreaks.length === 0 && (
+            {/* No Active Breaks */}
+            {(!todaysAttendance.activeBreaks || todaysAttendance.activeBreaks.length === 0) && 
+             (!todaysAttendance.activeNamazBreaks || todaysAttendance.activeNamazBreaks.length === 0) && (
               <div className="text-center py-4 text-gray-500 dark:text-gray-400">
                 <Coffee className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No active breaks</p>
@@ -256,10 +313,10 @@ export default function AttendanceDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Weekly Stats */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
             <Calendar className="w-5 h-5 mr-2" />
             This Week
-          </h2>
+          </h3>
           
           <div className="space-y-4">
             <div className="flex justify-between items-center">
@@ -272,14 +329,14 @@ export default function AttendanceDashboard() {
             <div className="flex justify-between items-center">
               <span className="text-gray-600 dark:text-gray-400">Total Hours</span>
               <span className="font-medium text-gray-900 dark:text-white">
-                {formatDuration(weeklyStats.totalWorkingHours)}
+                {formatDuration(weeklyStats.totalWorkingHours || 0)}
               </span>
             </div>
             
             <div className="flex justify-between items-center">
               <span className="text-gray-600 dark:text-gray-400">Average Hours</span>
               <span className="font-medium text-gray-900 dark:text-white">
-                {formatDuration(weeklyStats.averageWorkingHours)}
+                {formatDuration(Math.round(weeklyStats.averageWorkingHours) || 0)}
               </span>
             </div>
             
@@ -290,7 +347,7 @@ export default function AttendanceDashboard() {
                   ? 'text-red-600 dark:text-red-400' 
                   : 'text-green-600 dark:text-green-400'
               }`}>
-                {weeklyStats.lateCheckIns}
+                {weeklyStats.lateCheckIns || 0}
               </span>
             </div>
           </div>
@@ -298,10 +355,10 @@ export default function AttendanceDashboard() {
 
         {/* Monthly Stats */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
             <TrendingUp className="w-5 h-5 mr-2" />
             This Month
-          </h2>
+          </h3>
           
           <div className="space-y-4">
             <div className="flex justify-between items-center">
@@ -321,7 +378,7 @@ export default function AttendanceDashboard() {
             <div className="flex justify-between items-center">
               <span className="text-gray-600 dark:text-gray-400">Total Hours</span>
               <span className="font-medium text-gray-900 dark:text-white">
-                {formatDuration(monthlyStats.totalWorkingHours)}
+                {formatDuration(monthlyStats.totalWorkingHours || 0)}
               </span>
             </div>
             
@@ -332,7 +389,7 @@ export default function AttendanceDashboard() {
                   ? 'text-purple-600 dark:text-purple-400' 
                   : 'text-gray-900 dark:text-white'
               }`}>
-                {formatDuration(monthlyStats.totalOvertimeHours)}
+                {formatDuration(monthlyStats.totalOvertimeHours || 0)}
               </span>
             </div>
 
@@ -355,9 +412,9 @@ export default function AttendanceDashboard() {
 
       {/* Recent Attendance */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Attendance</h2>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Attendance</h3>
         
-        {recentAttendance.length > 0 ? (
+        {recentAttendance && recentAttendance.length > 0 ? (
           <div className="space-y-3">
             {recentAttendance.slice(0, 5).map((attendance) => (
               <div key={attendance.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
@@ -385,7 +442,7 @@ export default function AttendanceDashboard() {
                 
                 <div className="text-right">
                   <p className="font-medium text-gray-900 dark:text-white">
-                    {formatDuration(attendance.totalWorkingHours)}
+                    {formatDuration(attendance.totalWorkingHours || 0)}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {attendance.checkInTime && attendance.checkOutTime ? (

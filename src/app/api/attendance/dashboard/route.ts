@@ -80,6 +80,32 @@ function convertToIAttendance(doc: IAttendanceDocument): IAttendance {
   };
 }
 
+// Helper function to calculate current working hours
+function calculateCurrentWorkingHours(attendance: IAttendanceDocument): number {
+  if (!attendance.checkInTime) return 0;
+  
+  const now = new Date();
+  const endTime = attendance.checkOutTime || now;
+  
+  const grossMinutes = Math.round((endTime.getTime() - attendance.checkInTime.getTime()) / (1000 * 60));
+  const breakTime = attendance.calculateBreakTime();
+  const namazBreakTime = attendance.calculateNamazBreakTime();
+  
+  // Calculate ongoing break time if still working
+  let ongoingBreakTime = 0;
+  if (!attendance.checkOutTime) {
+    ongoingBreakTime = attendance.breaks.filter(b => b.isActive).reduce((total, b) => {
+      return total + Math.round((now.getTime() - b.startTime.getTime()) / (1000 * 60));
+    }, 0);
+    
+    ongoingBreakTime += attendance.namazBreaks.filter(nb => nb.isActive).reduce((total, nb) => {
+      return total + Math.round((now.getTime() - nb.startTime.getTime()) / (1000 * 60));
+    }, 0);
+  }
+  
+  return Math.max(0, grossMinutes - breakTime - namazBreakTime - ongoingBreakTime);
+}
+
 // GET - Get attendance dashboard data
 export async function GET(request: NextRequest) {
   try {
@@ -97,6 +123,27 @@ export async function GET(request: NextRequest) {
 
     // Get today's attendance
     const todaysAttendance = await Attendance.findTodaysAttendance(employeeId);
+    
+    // Calculate current working hours and break times
+    let currentWorkingHours = 0;
+    let totalBreakTime = 0;
+    
+    if (todaysAttendance) {
+      currentWorkingHours = calculateCurrentWorkingHours(todaysAttendance);
+      totalBreakTime = todaysAttendance.calculateBreakTime() + todaysAttendance.calculateNamazBreakTime();
+      
+      // Add ongoing break time
+      if (!todaysAttendance.checkOutTime) {
+        const now = new Date();
+        totalBreakTime += todaysAttendance.breaks.filter(b => b.isActive).reduce((total, b) => {
+          return total + Math.round((now.getTime() - b.startTime.getTime()) / (1000 * 60));
+        }, 0);
+        
+        totalBreakTime += todaysAttendance.namazBreaks.filter(nb => nb.isActive).reduce((total, nb) => {
+          return total + Math.round((now.getTime() - nb.startTime.getTime()) / (1000 * 60));
+        }, 0);
+      }
+    }
     
     // Prepare today's attendance data
     const todaysData: ITodaysAttendance = {
@@ -125,13 +172,9 @@ export async function GET(request: NextRequest) {
         isActive: nb.isActive,
         createdAt: nb.createdAt
       })) || [],
-      totalWorkingHours: todaysAttendance?.checkInTime && !todaysAttendance?.checkOutTime 
-        ? Math.round((new Date().getTime() - todaysAttendance.checkInTime.getTime()) / (1000 * 60))
-        : todaysAttendance?.totalWorkingHours || 0,
-      totalBreakTime: (todaysAttendance?.calculateBreakTime() || 0) + (todaysAttendance?.calculateNamazBreakTime() || 0),
-      remainingWorkingHours: todaysAttendance?.checkInTime && !todaysAttendance?.checkOutTime 
-        ? Math.max(0, 480 - Math.round((new Date().getTime() - todaysAttendance.checkInTime.getTime()) / (1000 * 60))) // 8 hours = 480 minutes
-        : 0
+      totalWorkingHours: currentWorkingHours,
+      totalBreakTime: totalBreakTime,
+      remainingWorkingHours: Math.max(0, 480 - currentWorkingHours) // 8 hours = 480 minutes
     };
 
     // Get weekly stats
@@ -159,6 +202,11 @@ export async function GET(request: NextRequest) {
     for (let i = 1; i <= 5; i++) {
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + i);
+      
+      // Skip weekends
+      if (futureDate.getDay() === 0 || futureDate.getDay() === 6) {
+        continue;
+      }
       
       // This should come from a shift scheduling system
       upcomingShifts.push({
@@ -255,15 +303,20 @@ export async function POST(request: NextRequest) {
 
     // Calculate summary statistics
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const presentDays = attendanceRecords.filter(r => r.status === 'present').length;
+    const presentDays = attendanceRecords.filter(r => r.status === 'present' || r.status === 'partial').length;
     const absentDays = totalDays - attendanceRecords.length;
     const lateCheckIns = attendanceRecords.filter(r => r.isLateCheckIn).length;
     const earlyCheckOuts = attendanceRecords.filter(r => r.isEarlyCheckOut).length;
     
-    const totalWorkingHours = attendanceRecords.reduce((sum, r) => sum + r.totalWorkingHours, 0);
+    // Use proper working hours calculation
+    const totalWorkingHours = attendanceRecords.reduce((sum, r) => {
+      return sum + calculateCurrentWorkingHours(r);
+    }, 0);
+    
     const totalBreakTime = attendanceRecords.reduce((sum, r) => {
       return sum + r.calculateBreakTime() + r.calculateNamazBreakTime();
     }, 0);
+    
     const totalOvertimeHours = attendanceRecords.reduce((sum, r) => {
       return sum + (r.overtime?.overtimeHours || 0);
     }, 0);

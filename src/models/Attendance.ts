@@ -192,29 +192,31 @@ const AttendanceSchema: Schema<IAttendanceDocument> = new Schema({
       enum: [
         'development', 'design', 'testing', 'documentation', 'meeting',
         'review', 'research', 'planning', 'support', 'other'
-      ]
+      ],
+      default: 'other'
     },
     priority: { 
       type: String, 
-      enum: ['low', 'medium', 'high', 'urgent']
+      enum: ['low', 'medium', 'high', 'urgent'],
+      default: 'medium'
     },
     notes: { type: String, maxlength: 500 },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
   }],
- overtime: {
-  overtimeHours: { type: Number, min: 0 },
-  reason: { type: String, maxlength: 500 }, // Remove 'required: true' from here
-  approvedBy: { type: String },
-  approvedByName: { type: String },
-  approvedAt: { type: Date },
-  status: { 
-    type: String, 
-    enum: ['pending', 'approved', 'rejected'],
-    default: 'pending'
+  overtime: {
+    overtimeHours: { type: Number, min: 0 },
+    reason: { type: String, maxlength: 500 },
+    approvedBy: { type: String },
+    approvedByName: { type: String },
+    approvedAt: { type: Date },
+    status: { 
+      type: String, 
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending'
+    },
+    createdAt: { type: Date, default: Date.now }
   },
-  createdAt: { type: Date, default: Date.now }
-},
   location: {
     checkInLocation: {
       latitude: { type: Number },
@@ -254,6 +256,22 @@ AttendanceSchema.pre('save', function(next) {
     this.status = 'present';
   } else if (this.checkInTime && !this.checkOutTime) {
     this.status = 'partial';
+    // For partial status, calculate current working hours
+    const now = new Date();
+    const grossMinutes = Math.round((now.getTime() - this.checkInTime.getTime()) / (1000 * 60));
+    const breakTime = this.calculateBreakTime();
+    const namazBreakTime = this.calculateNamazBreakTime();
+    
+    // Calculate ongoing break time
+    const ongoingBreakTime = this.breaks.filter(b => b.isActive).reduce((total, b) => {
+      return total + Math.round((now.getTime() - b.startTime.getTime()) / (1000 * 60));
+    }, 0);
+    
+    const ongoingNamazTime = this.namazBreaks.filter(nb => nb.isActive).reduce((total, nb) => {
+      return total + Math.round((now.getTime() - nb.startTime.getTime()) / (1000 * 60));
+    }, 0);
+    
+    this.totalWorkingHours = Math.max(0, grossMinutes - breakTime - namazBreakTime - ongoingBreakTime - ongoingNamazTime);
   }
   
   // Update break durations
@@ -328,9 +346,14 @@ AttendanceSchema.statics.getMonthlyStats = async function(
     date: { $gte: startDate, $lte: endDate }
   });
   
-  const totalWorkingDays = records.length;
-  const presentDays = records.filter((r: { status: string; }) => r.status === 'present').length;
-  const totalWorkingHours = records.reduce((sum: any, r: { totalWorkingHours: any; }) => sum + r.totalWorkingHours, 0);
+  // Calculate working days in the month (excluding weekends)
+  const totalWorkingDays = Array.from({ length: endDate.getDate() }, (_, i) => {
+    const date = new Date(year, month - 1, i + 1);
+    return date.getDay() !== 0 && date.getDay() !== 6; // Exclude Sunday (0) and Saturday (6)
+  }).filter(Boolean).length;
+  
+  const presentDays = records.filter((r: { status: string; }) => r.status === 'present' || r.status === 'partial').length;
+  const totalWorkingHours = records.reduce((sum: any, r: { totalWorkingHours: any; }) => sum + (r.totalWorkingHours || 0), 0);
   const attendancePercentage = totalWorkingDays > 0 ? (presentDays / totalWorkingDays) * 100 : 0;
   
   return {
@@ -345,17 +368,21 @@ AttendanceSchema.statics.getMonthlyStats = async function(
 AttendanceSchema.statics.getWeeklyStats = async function(employeeId: string) {
   const today = new Date();
   const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - today.getDay());
+  weekStart.setDate(today.getDate() - today.getDay()); // Start from Sunday
   weekStart.setHours(0, 0, 0, 0);
+  
+  const weekEnd = new Date(today);
+  weekEnd.setHours(23, 59, 59, 999);
   
   const records = await this.find({
     employeeId,
-    date: { $gte: weekStart, $lte: today }
+    date: { $gte: weekStart, $lte: weekEnd }
   });
   
-  const totalWorkingDays = records.length;
-  const presentDays = records.filter((r: { status: string; }) => r.status === 'present').length;
-  const totalWorkingHours = records.reduce((sum: any, r: { totalWorkingHours: any; }) => sum + r.totalWorkingHours, 0);
+  // Calculate working days in the week (exclude weekends)
+  const totalWorkingDays = 5; // Monday to Friday
+  const presentDays = records.filter((r: { status: string; }) => r.status === 'present' || r.status === 'partial').length;
+  const totalWorkingHours = records.reduce((sum: any, r: { totalWorkingHours: any; }) => sum + (r.totalWorkingHours || 0), 0);
   const averageWorkingHours = presentDays > 0 ? totalWorkingHours / presentDays : 0;
   const lateCheckIns = records.filter((r: { isLateCheckIn: any; }) => r.isLateCheckIn).length;
   
@@ -370,7 +397,27 @@ AttendanceSchema.statics.getWeeklyStats = async function(employeeId: string) {
 
 // Instance methods
 AttendanceSchema.methods.calculateWorkingHours = function(): number {
-  if (!this.checkInTime || !this.checkOutTime) return 0;
+  if (!this.checkInTime || !this.checkOutTime) {
+    // If still working, calculate current hours
+    if (this.checkInTime && !this.checkOutTime) {
+      const now = new Date();
+      const grossMinutes = Math.round((now.getTime() - this.checkInTime.getTime()) / (1000 * 60));
+      const breakTime = this.calculateBreakTime();
+      const namazBreakTime = this.calculateNamazBreakTime();
+      
+      // Calculate ongoing break time
+      const ongoingBreakTime = this.breaks.filter((b: { isActive: any; startTime: { getTime: () => number; }; }) => b.isActive).reduce((total: number, b: { startTime: { getTime: () => number; }; }) => {
+        return total + Math.round((now.getTime() - b.startTime.getTime()) / (1000 * 60));
+      }, 0);
+      
+      const ongoingNamazTime = this.namazBreaks.filter((nb: { isActive: any; }) => nb.isActive).reduce((total: number, nb: { startTime: { getTime: () => number; }; }) => {
+        return total + Math.round((now.getTime() - nb.startTime.getTime()) / (1000 * 60));
+      }, 0);
+      
+      return Math.max(0, grossMinutes - breakTime - namazBreakTime - ongoingBreakTime - ongoingNamazTime);
+    }
+    return 0;
+  }
   
   const workingMinutes = Math.round((this.checkOutTime.getTime() - this.checkInTime.getTime()) / (1000 * 60));
   const breakTime = this.calculateBreakTime();
@@ -380,22 +427,24 @@ AttendanceSchema.methods.calculateWorkingHours = function(): number {
 };
 
 AttendanceSchema.methods.calculateBreakTime = function(): number {
-  return this.breaks.reduce((total: number, breakItem: { endTime: { getTime: () => number; }; startTime: { getTime: () => number; }; }) => {
+  return this.breaks.reduce((total: number, breakItem: { endTime: { getTime: () => number; }; startTime: { getTime: () => number; }; duration: number; }) => {
     if (breakItem.endTime && breakItem.startTime) {
       const duration = Math.round((breakItem.endTime.getTime() - breakItem.startTime.getTime()) / (1000 * 60));
       return total + duration;
     }
-    return total;
+    // Return stored duration if available (for completed breaks)
+    return total + (breakItem.duration || 0);
   }, 0);
 };
 
 AttendanceSchema.methods.calculateNamazBreakTime = function(): number {
-  return this.namazBreaks.reduce((total: number, namazBreak: { endTime: { getTime: () => number; }; startTime: { getTime: () => number; }; }) => {
+  return this.namazBreaks.reduce((total: number, namazBreak: { endTime: { getTime: () => number; }; startTime: { getTime: () => number; }; duration: number; }) => {
     if (namazBreak.endTime && namazBreak.startTime) {
       const duration = Math.round((namazBreak.endTime.getTime() - namazBreak.startTime.getTime()) / (1000 * 60));
       return total + duration;
     }
-    return total;
+    // Return stored duration if available (for completed namaz breaks)
+    return total + (namazBreak.duration || 0);
   }, 0);
 };
 

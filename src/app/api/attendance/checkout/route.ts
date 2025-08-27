@@ -118,6 +118,56 @@ function convertToIAttendance(doc: IAttendanceDocument): IAttendance {
   };
 }
 
+// Helper function to validate tasks
+function validateTasks(tasksPerformed: any[], expectedWorkingMinutes: number) {
+  const errors: string[] = [];
+  
+  // Check if tasks are provided
+  if (!tasksPerformed || tasksPerformed.length === 0) {
+    errors.push('At least one task is required for checkout');
+    return errors;
+  }
+
+  let totalTaskTime = 0;
+  
+  // Validate each task
+  tasksPerformed.forEach((task, index) => {
+    if (!task.taskDescription || task.taskDescription.trim() === '') {
+      errors.push(`Task ${index + 1}: Task description is required`);
+    }
+    
+    if (!task.timeSpent || task.timeSpent <= 0) {
+      errors.push(`Task ${index + 1}: Time spent must be greater than 0 minutes`);
+    }
+    
+    if (task.timeSpent > 600) { // More than 10 hours for a single task
+      errors.push(`Task ${index + 1}: Time spent seems too high (${task.timeSpent} minutes). Please verify.`);
+    }
+    
+    totalTaskTime += task.timeSpent || 0;
+  });
+
+  // Validate total task time against working hours
+  if (expectedWorkingMinutes > 0) {
+    const timeDifference = Math.abs(totalTaskTime - expectedWorkingMinutes);
+    const allowedVariance = Math.max(60, expectedWorkingMinutes * 0.25); // 25% variance or 60 minutes minimum
+    
+    if (timeDifference > allowedVariance) {
+      if (totalTaskTime > expectedWorkingMinutes + allowedVariance) {
+        errors.push(`Total task time (${Math.round(totalTaskTime)} minutes) significantly exceeds your working time (${Math.round(expectedWorkingMinutes)} minutes). Please review your task entries.`);
+      } else if (totalTaskTime < expectedWorkingMinutes - allowedVariance) {
+        errors.push(`Total task time (${Math.round(totalTaskTime)} minutes) is significantly less than your working time (${Math.round(expectedWorkingMinutes)} minutes). Please account for all work performed.`);
+      }
+    }
+  }
+  
+  if (totalTaskTime < 30) {
+    errors.push('Total task time should be at least 30 minutes');
+  }
+
+  return errors;
+}
+
 // POST - Check out
 export async function POST(request: NextRequest) {
   try {
@@ -134,29 +184,12 @@ export async function POST(request: NextRequest) {
     const body: ICheckOutRequest = await request.json();
     const { tasksPerformed, location, earlyCheckOutReason } = body;
 
-    // Validate required fields
-    if (!tasksPerformed || tasksPerformed.length === 0) {
-      return NextResponse.json<IAttendanceApiResponse>({
-        success: false,
-        message: 'Tasks performed during the shift are required'
-      }, { status: 400 });
-    }
-
-    // Validate tasks - ensure total time spent doesn't exceed working hours
-    const totalTaskTime = tasksPerformed.reduce((sum, task) => sum + task.timeSpent, 0);
-    if (totalTaskTime <= 0) {
-      return NextResponse.json<IAttendanceApiResponse>({
-        success: false,
-        message: 'Total task time must be greater than 0'
-      }, { status: 400 });
-    }
-
     // Get today's attendance record
     const todaysAttendance = await Attendance.findTodaysAttendance(session.user.id);
     if (!todaysAttendance) {
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: 'No check-in record found for today'
+        message: 'No check-in record found for today. Please check in first.'
       }, { status: 404 });
     }
 
@@ -176,59 +209,77 @@ export async function POST(request: NextRequest) {
 
     // Check if employee is currently on a break
     if (todaysAttendance.isCurrentlyOnBreak()) {
+      const activeBreaks = todaysAttendance.breaks.filter(b => b.isActive);
+      const activeNamazBreaks = todaysAttendance.namazBreaks.filter(nb => nb.isActive);
+      
+      let breakDetails = '';
+      if (activeBreaks.length > 0) {
+        breakDetails = `Active break: ${activeBreaks[0].breakType}`;
+      }
+      if (activeNamazBreaks.length > 0) {
+        breakDetails += (breakDetails ? ', ' : '') + `Active prayer: ${activeNamazBreaks[0].namazType}`;
+      }
+      
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: 'Cannot check out while on a break. Please end your break first.'
+        message: `Cannot check out while on a break. Please end your current break first. ${breakDetails}`
       }, { status: 400 });
     }
 
     const checkOutTime = new Date();
-    const shiftEndTime = getShiftEndTime(todaysAttendance.shift as ShiftType, todaysAttendance.checkInTime);
     
-    // Check if check-out is early
-    const isEarly = isEarlyCheckOut(checkOutTime, shiftEndTime);
-    
-    // If early and no reason provided, require reason
-    if (isEarly && !earlyCheckOutReason) {
-      return NextResponse.json<IAttendanceApiResponse>({
-        success: false,
-        message: 'Early check-out reason is required when checking out more than 15 minutes before shift end'
-      }, { status: 400 });
-    }
-
-    // Calculate working hours (will be done by the model's pre-save middleware)
+    // Calculate working hours
     const grossWorkingMinutes = Math.round((checkOutTime.getTime() - todaysAttendance.checkInTime.getTime()) / (1000 * 60));
     const breakTime = todaysAttendance.calculateBreakTime();
     const namazBreakTime = todaysAttendance.calculateNamazBreakTime();
     const netWorkingMinutes = Math.max(0, grossWorkingMinutes - breakTime - namazBreakTime);
 
-    // Check if total task time is reasonable compared to working hours
-    if (totalTaskTime > netWorkingMinutes + 60) { // Allow 60 minutes buffer
+    // Validate tasks
+    const taskValidationErrors = validateTasks(tasksPerformed, netWorkingMinutes);
+    if (taskValidationErrors.length > 0) {
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: `Total task time (${totalTaskTime} minutes) cannot exceed working hours (${netWorkingMinutes} minutes)`
+        message: 'Task validation failed',
+        error: taskValidationErrors.join('; ')
+      }, { status: 400 });
+    }
+
+    // Check for early checkout
+    const shiftEndTime = getShiftEndTime(todaysAttendance.shift as ShiftType, todaysAttendance.checkInTime);
+    const isEarly = isEarlyCheckOut(checkOutTime, shiftEndTime);
+    
+    // If early and no reason provided, require reason
+    if (isEarly && (!earlyCheckOutReason || earlyCheckOutReason.trim() === '')) {
+      const earlyMinutes = Math.round((shiftEndTime.getTime() - checkOutTime.getTime()) / (1000 * 60));
+      return NextResponse.json<IAttendanceApiResponse>({
+        success: false,
+        message: `You are checking out ${earlyMinutes} minutes early. Please provide a reason for early check-out.`
       }, { status: 400 });
     }
 
     // Prepare tasks with IDs
     const tasksWithIds = tasksPerformed.map(task => ({
       id: new mongoose.Types.ObjectId().toString(),
-      taskDescription: task.taskDescription,
-      timeSpent: task.timeSpent,
-      taskCategory: task.taskCategory,
-      priority: task.priority,
-      notes: task.notes,
+      taskDescription: task.taskDescription.trim(),
+      timeSpent: Math.max(0, task.timeSpent || 0),
+      taskCategory: task.taskCategory || 'other',
+      priority: task.priority || 'medium',
+      notes: task.notes?.trim() || '',
       createdAt: new Date(),
       updatedAt: new Date()
     }));
+
+    // Calculate total task time for validation
+    const totalTaskTime = tasksWithIds.reduce((sum, task) => sum + task.timeSpent, 0);
 
     // Update attendance record
     const updateData: any = {
       checkOutTime,
       isEarlyCheckOut: isEarly,
-      earlyCheckOutReason: isEarly ? earlyCheckOutReason : undefined,
+      earlyCheckOutReason: isEarly ? earlyCheckOutReason?.trim() : undefined,
       tasksPerformed: tasksWithIds,
-      'location.checkOutLocation': location
+      'location.checkOutLocation': location,
+      status: 'present' // Mark as present when checked out
     };
 
     // Calculate overtime if applicable
@@ -256,14 +307,29 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
+    // Calculate final working hours (the pre-save middleware should handle this)
+    const finalWorkingHours = updatedAttendance.calculateWorkingHours();
+
     // Calculate summary
     const workingSummary = {
-      totalWorkingTime: netWorkingMinutes,
+      grossWorkingTime: grossWorkingMinutes,
       totalBreakTime: breakTime + namazBreakTime,
+      netWorkingTime: finalWorkingHours,
       totalTaskTime,
       isEarlyCheckOut: isEarly,
-      overtimeHours: updateData.overtime?.overtimeHours || 0
+      overtimeHours: updateData.overtime?.overtimeHours || 0,
+      earlyMinutes: isEarly ? Math.round((shiftEndTime.getTime() - checkOutTime.getTime()) / (1000 * 60)) : 0
     };
+
+    const successMessage = isEarly 
+      ? `Checked out successfully (Early by ${workingSummary.earlyMinutes} minutes)`
+      : 'Checked out successfully';
+
+    const additionalMessage = isEarly 
+      ? 'You have checked out early. Please ensure to complete your full shift in the future.'
+      : finalWorkingHours > standardShiftMinutes
+      ? `Great job! You worked ${Math.round((finalWorkingHours - standardShiftMinutes))} minutes of overtime today.`
+      : 'Thank you for your work today! Have a great day.';
 
     return NextResponse.json<IAttendanceApiResponse<{
       attendance: IAttendance;
@@ -271,15 +337,11 @@ export async function POST(request: NextRequest) {
       message: string;
     }>>({
       success: true,
-      message: isEarly 
-        ? `Checked out successfully (Early by ${Math.round((shiftEndTime.getTime() - checkOutTime.getTime()) / (1000 * 60))} minutes)`
-        : 'Checked out successfully',
+      message: successMessage,
       data: {
         attendance: convertToIAttendance(updatedAttendance),
         summary: workingSummary,
-        message: isEarly 
-          ? 'You have checked out early. Please ensure to complete your full shift in the future.'
-          : 'Thank you for your work today! Have a great day.'
+        message: additionalMessage
       }
     });
 
@@ -338,23 +400,30 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Validate total task time against working hours
-    const totalTaskTime = tasksPerformed.reduce((sum: number, task: any) => sum + task.timeSpent, 0);
-    if (totalTaskTime > attendance.totalWorkingHours + 60) { // Allow 60 minutes buffer
+    // Calculate the net working time for validation
+    const grossWorkingMinutes = Math.round((attendance.checkOutTime.getTime() - attendance.checkInTime!.getTime()) / (1000 * 60));
+    const breakTime = attendance.calculateBreakTime();
+    const namazBreakTime = attendance.calculateNamazBreakTime();
+    const netWorkingMinutes = Math.max(0, grossWorkingMinutes - breakTime - namazBreakTime);
+
+    // Validate the updated tasks
+    const taskValidationErrors = validateTasks(tasksPerformed, netWorkingMinutes);
+    if (taskValidationErrors.length > 0) {
       return NextResponse.json<IAttendanceApiResponse>({
         success: false,
-        message: `Total task time (${totalTaskTime} minutes) cannot exceed working hours (${attendance.totalWorkingHours} minutes)`
+        message: 'Task validation failed',
+        error: taskValidationErrors.join('; ')
       }, { status: 400 });
     }
 
     // Prepare updated tasks
     const updatedTasks = tasksPerformed.map((task: any) => ({
       id: task.id || new mongoose.Types.ObjectId().toString(),
-      taskDescription: task.taskDescription,
-      timeSpent: task.timeSpent,
-      taskCategory: task.taskCategory,
-      priority: task.priority,
-      notes: task.notes,
+      taskDescription: task.taskDescription.trim(),
+      timeSpent: Math.max(0, task.timeSpent || 0),
+      taskCategory: task.taskCategory || 'other',
+      priority: task.priority || 'medium',
+      notes: task.notes?.trim() || '',
       createdAt: task.createdAt || new Date(),
       updatedAt: new Date()
     }));
