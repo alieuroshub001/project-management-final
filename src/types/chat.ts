@@ -24,7 +24,7 @@ export interface IChat {
   createdBy: string;
   createdByName: string;
   createdByEmail: string;
-  participants: IChatParticipant[];
+  participants: string[]; // Changed to string[]
   admins: string[]; // User IDs who are admins
   lastMessage?: IMessage;
   lastActivity: Date;
@@ -315,6 +315,7 @@ export interface IChatCreateRequest {
   type: ChatType;
   description?: string;
   participants: string[]; // User IDs
+  admins?: string[]; // Added admins field
   isPrivate?: boolean;
   settings?: Partial<IChatSettings>;
   avatar?: File;
