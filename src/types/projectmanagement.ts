@@ -350,17 +350,27 @@ export type ActivityType =
   | 'project-created' 
   | 'project-updated' 
   | 'project-completed' 
+  | 'project-archived'        // ADD THIS
   | 'task-created' 
   | 'task-updated' 
   | 'task-assigned' 
-  | 'task-completed' 
+  | 'task-completed'
+  | 'task-deleted'           // ADD THIS
   | 'member-added' 
   | 'member-removed' 
-  | 'comment-added' 
+  | 'member-updated'         // ADD THIS
+  | 'comment-added'
+  | 'comment-updated'        // ADD THIS
+  | 'comment-deleted'        // ADD THIS
   | 'file-uploaded' 
+  | 'file-deleted'           // ADD THIS
   | 'milestone-created' 
-  | 'milestone-completed' 
-  | 'time-logged';
+  | 'milestone-completed'
+  | 'milestone-updated'      // ADD THIS
+  | 'milestone-deleted'      // ADD THIS
+  | 'time-logged'
+  | 'time-approved'          // ADD THIS
+  | 'time-rejected';         // ADD THIS
 
 export type EntityType = 
   | 'project' 
@@ -671,6 +681,23 @@ export type ProjectReport = {
   averageTaskDuration: number;
   overdueItems: number;
 };
+export interface ITimeEntryApprovalRequest {
+  status: 'approved' | 'rejected';
+  approvalNotes?: string;
+}
+
+export interface IProjectStatusUpdateRequest {
+  status: ProjectStatus;
+  completedAt?: Date;
+  completionNotes?: string;
+}
+
+export interface ITaskStatusUpdateRequest {
+  status: TaskStatus;
+  progress?: number;
+  completedAt?: Date;
+  completionNotes?: string;
+}
 
 // NextAuth module declarations
 declare module "next-auth" {

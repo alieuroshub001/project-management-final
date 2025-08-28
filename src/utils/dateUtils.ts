@@ -44,10 +44,18 @@ export const getBusinessDays = (startDate: Date, endDate: Date): number => {
   return count;
 };
 
-export const formatDistanceToNow = (date: Date, options?: { addSuffix?: boolean }): string => {
+export const formatDistanceToNow = (date: Date | string, options?: { addSuffix?: boolean }): string => {
+  // Convert string to Date if needed
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  // Check if date is valid
+  if (!dateObj || isNaN(dateObj.getTime())) {
+    return 'Invalid date';
+  }
+  
   const now = new Date();
-  const diffInMilliseconds = Math.abs(now.getTime() - date.getTime());
-  const isPast = date < now;
+  const diffInMilliseconds = Math.abs(now.getTime() - dateObj.getTime());
+  const isPast = dateObj < now;
   
   // Convert milliseconds to different units
   const diffInSeconds = Math.floor(diffInMilliseconds / 1000);

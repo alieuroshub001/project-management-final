@@ -1,13 +1,8 @@
-import { Milestone } from "lucide-react";
 import mongoose, { Model, Schema } from "mongoose";
-import Project from "./Project";
-import { ProjectActivity } from "./ProjectActivity";
-import { Task } from "./Task";
-import { TeamMember } from "./TeamMember";
-import { TimeEntry } from "./TimeEntry";
 
-// models/employee/ProjectTemplate.ts
+// models/Project/ProjectTemplate.ts
 export interface IProjectTemplateDocument extends Document {
+  _id: string | { toString(): string; };
   name: string;
   description: string;
   category: string;
@@ -153,16 +148,3 @@ const ProjectTemplate: IProjectTemplateModel =
   mongoose.model<IProjectTemplateDocument, IProjectTemplateModel>('ProjectTemplate', ProjectTemplateSchema);
 
 export { ProjectTemplate };
-
-// Export all models
-export default {
-  Project,
-  TeamMember,
-  Task,
-  Comment,
-  TimeEntry,
-  ProjectActivity,
-  Milestone,
-  ProjectTemplate
-}; 
-

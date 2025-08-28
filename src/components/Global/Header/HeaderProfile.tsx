@@ -4,12 +4,24 @@ import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import { Session } from 'next-auth';
 
+interface ProfileData {
+  displayName?: string;
+  firstName: string;
+  lastName: string;
+  profileImage?: {
+    secure_url: string;
+  };
+  email: string;
+  designation?: string;
+}
+
 interface HeaderProfileProps {
   session?: Session | null;
 }
 
 export default function HeaderProfile({ session }: HeaderProfileProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,12 +35,46 @@ export default function HeaderProfile({ session }: HeaderProfileProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Fetch profile data
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!session?.user) return;
+
+      try {
+        const response = await fetch('/api/profile', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          cache: 'no-store'
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setProfileData(data.data);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile data:', error);
+      }
+    };
+
+    fetchProfile();
+  }, [session]);
+
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/auth/employee/login' });
   };
 
   // Get user initials safely
   const getUserInitials = () => {
+    if (profileData?.displayName) {
+      return profileData.displayName.split(' ').map(n => n.charAt(0)).join('').slice(0, 2).toUpperCase();
+    }
+    if (profileData?.firstName && profileData?.lastName) {
+      return `${profileData.firstName.charAt(0)}${profileData.lastName.charAt(0)}`.toUpperCase();
+    }
     if (session?.user?.name) {
       return session.user.name.charAt(0).toUpperCase();
     }
@@ -37,12 +83,23 @@ export default function HeaderProfile({ session }: HeaderProfileProps) {
 
   // Get user name safely
   const getUserName = () => {
+    if (profileData?.displayName) {
+      return profileData.displayName;
+    }
+    if (profileData?.firstName && profileData?.lastName) {
+      return `${profileData.firstName} ${profileData.lastName}`;
+    }
     return session?.user?.name || 'User';
   };
 
   // Get user email safely
   const getUserEmail = () => {
-    return session?.user?.email || 'user@example.com';
+    return profileData?.email || session?.user?.email || 'user@example.com';
+  };
+
+  // Get user designation
+  const getUserDesignation = () => {
+    return profileData?.designation || 'Employee';
   };
 
   return (
@@ -51,17 +108,27 @@ export default function HeaderProfile({ session }: HeaderProfileProps) {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
       >
-        <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
-          <span className="text-white font-medium text-sm">
-            {getUserInitials()}
-          </span>
+        <div className="w-15 h-15 rounded-full flex items-center justify-center overflow-hidden">
+          {profileData?.profileImage?.secure_url ? (
+            <img
+              src={profileData.profileImage.secure_url}
+              alt={getUserName()}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center">
+              <span className="text-white font-medium text-base">
+                {getUserInitials()}
+              </span>
+            </div>
+          )}
         </div>
         <div className="text-left hidden md:block">
           <p className="text-sm font-medium text-gray-900 dark:text-white">
             {getUserName()}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Employee
+            {getUserDesignation()}
           </p>
         </div>
       </button>
@@ -89,17 +156,7 @@ export default function HeaderProfile({ session }: HeaderProfileProps) {
               My Profile
             </Link>
 
-            <Link
-              href="/employee/settings"
-              className="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-              onClick={() => setIsOpen(false)}
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Settings
-            </Link>
+
 
             <button
               onClick={handleLogout}

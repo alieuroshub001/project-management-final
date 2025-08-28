@@ -2,6 +2,7 @@ import mongoose, { Model, Schema } from "mongoose";
 
 // models/employee/TimeEntry.ts
 export interface ITimeEntryDocument extends Document {
+  _id: any;
   projectId: mongoose.Types.ObjectId;
   taskId?: mongoose.Types.ObjectId;
   employeeId: mongoose.Types.ObjectId;
