@@ -386,7 +386,6 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
     const errors = validateTasks();
     if (errors.length > 0) {
       setTaskValidationErrors(errors);
-      setError('Please fix the following issues with your tasks before checking out');
       return;
     }
 
@@ -565,25 +564,13 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
         </div>
       </div>
 
-      {/* Global Messages */}
-      {error && (
+      {/* Global Messages - Only show non-task validation errors */}
+      {error && taskValidationErrors.length === 0 && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
           <div className="flex items-start">
             <AlertCircle className="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-red-700 dark:text-red-300">{error}</p>
-              
-              {/* Task validation errors */}
-              {taskValidationErrors.length > 0 && (
-                <ul className="mt-3 space-y-2">
-                  {taskValidationErrors.map((taskError, index) => (
-                    <li key={index} className="text-sm text-red-600 dark:text-red-400 flex items-center">
-                      <X className="w-3 h-3 mr-2 flex-shrink-0" />
-                      {taskError}
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
           </div>
         </div>
@@ -694,11 +681,51 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
             </div>
           )}
 
+          {/* Check-in Validation Errors */}
+          {error && (!todaysAttendance?.hasCheckedIn) && (
+            <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-red-500 mr-3 flex-shrink-0" />
+                <p className="text-red-700 dark:text-red-300">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Custom Time Validation */}
+          {selectedShift === 'random' && customTimes.startTime && customTimes.endTime && (
+            (() => {
+              const startTime = new Date(`1970-01-01T${customTimes.startTime}`);
+              const endTime = new Date(`1970-01-01T${customTimes.endTime}`);
+              const isInvalid = startTime >= endTime;
+              
+              return isInvalid ? (
+                <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <AlertCircle className="w-5 h-5 text-red-500 mr-3 flex-shrink-0" />
+                    <p className="text-red-700 dark:text-red-300">
+                      End time must be after start time. Please adjust your custom hours.
+                    </p>
+                  </div>
+                </div>
+              ) : null;
+            })()
+          )}
+
           <button
             onClick={handleCheckIn}
-            disabled={actionLoading || (selectedShift === 'random' && (!customTimes.startTime || !customTimes.endTime)) || (isLateCheckIn && !lateReason.trim())}
+            disabled={
+              actionLoading || 
+              (selectedShift === 'random' && (!customTimes.startTime || !customTimes.endTime)) || 
+              (selectedShift === 'random' && customTimes.startTime && customTimes.endTime && 
+                new Date(`1970-01-01T${customTimes.startTime}`) >= new Date(`1970-01-01T${customTimes.endTime}`)) ||
+              (isLateCheckIn && !lateReason.trim())
+            }
             className={`w-full px-6 py-3 rounded-xl font-medium transition-colors ${
-              actionLoading || (isLateCheckIn && !lateReason.trim())
+              actionLoading || 
+              (selectedShift === 'random' && (!customTimes.startTime || !customTimes.endTime)) || 
+              (selectedShift === 'random' && customTimes.startTime && customTimes.endTime && 
+                new Date(`1970-01-01T${customTimes.startTime}`) >= new Date(`1970-01-01T${customTimes.endTime}`)) ||
+              (isLateCheckIn && !lateReason.trim())
                 ? 'bg-gray-400 cursor-not-allowed text-white' 
                 : 'bg-green-600 hover:bg-green-700 text-white'
             }`}
@@ -773,7 +800,7 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
             {/* Namaz Breaks */}
             <div className="space-y-4">
               <h3 className="font-medium text-gray-900 dark:text-white flex items-center">
-                <Heart  className="w-5 h-5 mr-2" />
+                <Heart className="w-5 h-5 mr-2" />
                 Namaz Breaks
               </h3>
               
@@ -981,6 +1008,64 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
             </div>
           )}
 
+          {/* Check-out Validation Errors */}
+          {error && (todaysAttendance?.hasCheckedIn && !todaysAttendance?.hasCheckedOut) && taskValidationErrors.length === 0 && (
+            <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-red-500 mr-3 flex-shrink-0" />
+                <p className="text-red-700 dark:text-red-300">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Task Validation Errors - Moved here to be more visible */}
+          {taskValidationErrors.length > 0 && (
+            <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-start">
+                <AlertCircle className="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-medium text-red-800 dark:text-red-300 mb-2">
+                    Please fix the following issues before checking out:
+                  </h3>
+                  <ul className="space-y-1">
+                    {taskValidationErrors.map((taskError, index) => (
+                      <li key={index} className="text-sm text-red-700 dark:text-red-400 flex items-center">
+                        <X className="w-3 h-3 mr-2 flex-shrink-0" />
+                        {taskError}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active Breaks Warning */}
+          {(activeBreaks.length > 0 || activeNamazBreaks.length > 0) && (
+            <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+              <div className="flex items-start">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-3 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-medium text-amber-800 dark:text-amber-300 mb-2">
+                    Active breaks must be ended before checkout
+                  </h3>
+                  <div className="text-sm text-amber-700 dark:text-amber-400">
+                    {activeBreaks.length > 0 && (
+                      <p className="mb-1">
+                        Active general breaks: {activeBreaks.map(b => b.breakType).join(', ')}
+                      </p>
+                    )}
+                    {activeNamazBreaks.length > 0 && (
+                      <p>
+                        Active prayer breaks: {activeNamazBreaks.map(nb => nb.namazType).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={handleCheckOut}
             disabled={actionLoading || activeBreaks.length > 0 || activeNamazBreaks.length > 0}
@@ -1003,12 +1088,6 @@ export default function AttendanceCheckInOut({ onSuccess }: AttendanceCheckInOut
               </div>
             )}
           </button>
-
-          {(activeBreaks.length > 0 || activeNamazBreaks.length > 0) && (
-            <p className="text-sm text-amber-600 dark:text-amber-400 text-center mt-2">
-              Please end all active breaks before checking out
-            </p>
-          )}
         </div>
       )}
 
