@@ -57,7 +57,7 @@ async function canComment(projectId: string, userId: string): Promise<boolean> {
 // GET - List comments for a project
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -68,10 +68,14 @@ export async function GET(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const projectId = resolvedParams.id;
+
     await connectToDatabase();
 
     // Check if user has access to view project
-    const project = await Project.findById(params.id);
+    const project = await Project.findById(projectId);
     if (!project) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -82,7 +86,7 @@ export async function GET(
     const hasAccess = project.createdBy.toString() === session.user.id ||
                      project.projectManager.toString() === session.user.id ||
                      await TeamMember.findOne({
-                       projectId: params.id,
+                       projectId: projectId,
                        employeeId: session.user.id,
                        isActive: true
                      });
@@ -100,7 +104,7 @@ export async function GET(
     const commentType = searchParams.get('commentType');
 
     // Build filter object
-    const filter: any = { projectId: params.id };
+    const filter: any = { projectId: projectId };
     if (commentType) filter.commentType = commentType;
 
     // Execute query with pagination
@@ -151,7 +155,7 @@ export async function GET(
 // POST - Create new comment
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -162,10 +166,14 @@ export async function POST(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const projectId = resolvedParams.id;
+
     await connectToDatabase();
 
     // Check if user can comment
-    const canUserComment = await canComment(params.id, session.user.id);
+    const canUserComment = await canComment(projectId, session.user.id);
     if (!canUserComment) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -196,7 +204,7 @@ export async function POST(
       const parentComment = await Comment.findOne({
         _id: parentCommentId,
         $or: [
-          { projectId: params.id },
+          { projectId: projectId },
           { taskId: taskId }
         ]
       });
@@ -210,7 +218,7 @@ export async function POST(
     }
 
     const commentData = {
-      projectId: commentType === 'project-comment' ? params.id : undefined,
+      projectId: commentType === 'project-comment' ? projectId : undefined,
       taskId: taskId || undefined,
       commentType,
       content,
@@ -226,7 +234,7 @@ export async function POST(
 
     // Create activity log
     await ProjectActivity.create({
-      projectId: params.id,
+      projectId: projectId,
       activityType: 'comment-added',
       description: `Comment was added${taskId ? ' to task' : ' to project'}`,
       performedBy: session.user.id,

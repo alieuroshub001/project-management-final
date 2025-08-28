@@ -57,7 +57,7 @@ async function canManageMilestones(projectId: string, userId: string): Promise<b
 // GET - List milestones for a project
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -68,10 +68,14 @@ export async function GET(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const projectId = resolvedParams.id;
+
     await connectToDatabase();
 
     // Check if user has access
-    const hasAccess = await canManageMilestones(params.id, session.user.id);
+    const hasAccess = await canManageMilestones(projectId, session.user.id);
     if (!hasAccess) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -89,12 +93,12 @@ export async function GET(
     if (upcoming) {
       const days = parseInt(searchParams.get('days') || '7');
       milestones = await Milestone.findUpcoming(days) as IMilestoneDocument[];
-      milestones = milestones.filter(m => m.projectId.toString() === params.id);
+      milestones = milestones.filter(m => m.projectId.toString() === projectId);
     } else if (overdue) {
       milestones = await Milestone.findOverdue() as IMilestoneDocument[];
-      milestones = milestones.filter(m => m.projectId.toString() === params.id);
+      milestones = milestones.filter(m => m.projectId.toString() === projectId);
     } else {
-      const filter: any = { projectId: params.id };
+      const filter: any = { projectId: projectId };
       if (status) filter.status = status;
       
       milestones = await Milestone.find(filter).sort({ dueDate: 1 }) as IMilestoneDocument[];
@@ -121,7 +125,7 @@ export async function GET(
 // POST - Create new milestone
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -132,10 +136,14 @@ export async function POST(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const projectId = resolvedParams.id;
+
     await connectToDatabase();
 
     // Check if user can manage milestones (only PM or creator)
-    const project = await Project.findById(params.id);
+    const project = await Project.findById(projectId);
     if (!project) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -168,7 +176,7 @@ export async function POST(
     if (tasks && tasks.length > 0) {
       const projectTasks = await Task.find({ 
         _id: { $in: tasks }, 
-        projectId: params.id 
+        projectId: projectId 
       });
       
       if (projectTasks.length !== tasks.length) {
@@ -180,7 +188,7 @@ export async function POST(
     }
 
     const milestoneData = {
-      projectId: params.id,
+      projectId: projectId,
       title,
       description,
       dueDate: new Date(dueDate),
@@ -193,7 +201,7 @@ export async function POST(
 
     // Create activity log
     await ProjectActivity.create({
-      projectId: params.id,
+      projectId: projectId,
       activityType: 'milestone-created',
       description: `Milestone "${title}" was created`,
       performedBy: session.user.id,

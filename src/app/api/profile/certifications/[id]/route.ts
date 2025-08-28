@@ -6,14 +6,10 @@ import connectToDatabase from '@/lib/db';
 import EmployeeProfile from '@/models/Profile';
 import { IProfileApiResponse } from '@/types/profile';
 
-interface Params {
-  id: string;
-}
-
 // DELETE - Delete certification
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Params }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -24,6 +20,10 @@ export async function DELETE(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const certificationId = resolvedParams.id;
+
     await connectToDatabase();
 
     const profile = await EmployeeProfile.findOne({ userId: session.user.id });
@@ -33,8 +33,6 @@ export async function DELETE(
         message: 'Profile not found'
       }, { status: 404 });
     }
-
-    const certificationId = params.id;
 
     // Find and remove certification
     const initialLength = profile.certifications?.length || 0;

@@ -299,7 +299,7 @@ export default function PublicProfileView({ profileId, onBack }: PublicProfileVi
                 Certifications
               </h2>
               <div className="space-y-4">
-                {profile.certifications.slice(0, 3).map((cert) => (
+                {profile.certifications.slice(0, 3).map((cert: any) => (
                   <div key={cert.id} className="border-l-4 border-yellow-500 pl-4">
                     <h3 className="font-semibold text-gray-900 dark:text-white">{cert.name}</h3>
                     <p className="text-gray-600 dark:text-gray-400">{cert.issuingOrganization}</p>
@@ -329,6 +329,63 @@ export default function PublicProfileView({ profileId, onBack }: PublicProfileVi
               </div>
             </div>
           )}
+
+          {/* Recent Education */}
+          {profile.education && profile.education.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                <GraduationCap className="w-5 h-5 mr-2" />
+                Education
+              </h2>
+              <div className="space-y-4">
+                {profile.education.slice(0, 3).map((edu: any) => (
+                  <div key={edu.id} className="border-l-4 border-indigo-500 pl-4">
+                    <h3 className="font-semibold text-gray-900 dark:text-white">{edu.degree}</h3>
+                    <p className="text-gray-600 dark:text-gray-400">{edu.institution}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(edu.startDate).getFullYear()} - 
+                      {edu.isCurrent ? ' Present' : edu.endDate ? ` ${new Date(edu.endDate).getFullYear()}` : ' N/A'}
+                    </p>
+                    {edu.grade && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Grade: {edu.grade}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recent Experience */}
+          {profile.experience && profile.experience.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                <Briefcase className="w-5 h-5 mr-2" />
+                Work Experience
+              </h2>
+              <div className="space-y-4">
+                {profile.experience.slice(0, 3).map((exp: any) => (
+                  <div key={exp.id} className="border-l-4 border-green-500 pl-4">
+                    <h3 className="font-semibold text-gray-900 dark:text-white">{exp.position}</h3>
+                    <p className="text-gray-600 dark:text-gray-400">{exp.company}</p>
+                    {exp.location && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{exp.location}</p>
+                    )}
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(exp.startDate).getFullYear()} - 
+                      {exp.isCurrent ? ' Present' : exp.endDate ? ` ${new Date(exp.endDate).getFullYear()}` : ' N/A'}
+                    </p>
+                    {exp.description && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
+                        {exp.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column */}
@@ -341,7 +398,7 @@ export default function PublicProfileView({ profileId, onBack }: PublicProfileVi
                 Social Links
               </h2>
               <div className="space-y-3">
-                {profile.socialLinks.filter(link => link.isPublic).map((link, index) => (
+                {profile.socialLinks.filter(link => link.isPublic).map((link: any, index: number) => (
                   <a
                     key={index}
                     href={link.url}
@@ -364,7 +421,7 @@ export default function PublicProfileView({ profileId, onBack }: PublicProfileVi
                 Languages
               </h2>
               <div className="space-y-2">
-                {profile.languages.map((lang, index) => (
+                {profile.languages.map((lang: any, index: number) => (
                   <div key={index} className="flex justify-between items-center">
                     <span className="text-sm text-gray-900 dark:text-white font-medium">
                       {lang.language} {lang.isPrimary && "(Primary)"}
@@ -416,60 +473,4 @@ export default function PublicProfileView({ profileId, onBack }: PublicProfileVi
       </div>
     </div>
   );
-}</div>
-            </div>
-          )}
-
-          {/* Recent Education */}
-          {profile.education && profile.education.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                <GraduationCap className="w-5 h-5 mr-2" />
-                Education
-              </h2>
-              <div className="space-y-4">
-                {profile.education.slice(0, 3).map((edu) => (
-                  <div key={edu.id} className="border-l-4 border-indigo-500 pl-4">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{edu.degree}</h3>
-                    <p className="text-gray-600 dark:text-gray-400">{edu.institution}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(edu.startDate).getFullYear()} - 
-                      {edu.isCurrent ? ' Present' : edu.endDate ? ` ${new Date(edu.endDate).getFullYear()}` : ' N/A'}
-                    </p>
-                    {edu.grade && (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Grade: {edu.grade}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Recent Experience */}
-          {profile.experience && profile.experience.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                <Briefcase className="w-5 h-5 mr-2" />
-                Work Experience
-              </h2>
-              <div className="space-y-4">
-                {profile.experience.slice(0, 3).map((exp) => (
-                  <div key={exp.id} className="border-l-4 border-green-500 pl-4">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{exp.position}</h3>
-                    <p className="text-gray-600 dark:text-gray-400">{exp.company}</p>
-                    {exp.location && (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{exp.location}</p>
-                    )}
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(exp.startDate).getFullYear()} - 
-                      {exp.isCurrent ? ' Present' : exp.endDate ? ` ${new Date(exp.endDate).getFullYear()}` : ' N/A'}
-                    </p>
-                    {exp.description && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
-                        {exp.description}
-                      </p>
-                    )}
-                  </div>
-                ))}
+}

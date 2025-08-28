@@ -121,9 +121,8 @@ export async function POST(request: NextRequest) {
     console.error('File upload error:', error);
     return NextResponse.json<IFileUploadResponse>({
       success: false,
-      message: 'Failed to upload files',
-      files: [],
-      error: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Failed to upload files',
+      files: []
     }, { status: 500 });
   }
 }

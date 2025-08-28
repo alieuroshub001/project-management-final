@@ -34,7 +34,7 @@ function convertToILeave(doc: ILeaveDocument): ILeave {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -47,12 +47,15 @@ export async function PUT(
 
     await connectToDatabase();
     
+    // Await the params object
+    const { id } = await params;
+    
     const body: ILeaveUpdateRequest = await request.json();
     const { leaveType, startDate, endDate, reason, emergencyContact, handoverNotes, cloudinaryAttachments, filesToDelete } = body;
 
     // Find the leave
     const leave = await Leave.findOne({
-      _id: params.id,
+      _id: id,
       employeeId: session.user.id
     }) as ILeaveDocument | null;
 
@@ -100,7 +103,7 @@ export async function PUT(
     }
 
     const updatedLeave = await Leave.findByIdAndUpdate(
-      params.id,
+      id,
       updateData,
       { new: true }
     ) as ILeaveDocument | null;

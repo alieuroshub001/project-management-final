@@ -57,7 +57,7 @@ async function canManageTeam(projectId: string, userId: string): Promise<boolean
 // GET - List team members
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -68,10 +68,14 @@ export async function GET(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const projectId = resolvedParams.id;
+
     await connectToDatabase();
 
     // Check if user has access to view project
-    const project = await Project.findById(params.id);
+    const project = await Project.findById(projectId);
     if (!project) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -82,7 +86,7 @@ export async function GET(
     const hasAccess = project.createdBy.toString() === session.user.id ||
                      project.projectManager.toString() === session.user.id ||
                      await TeamMember.findOne({
-                       projectId: params.id,
+                       projectId: projectId,
                        employeeId: session.user.id,
                        isActive: true
                      });
@@ -94,7 +98,7 @@ export async function GET(
       }, { status: 403 });
     }
 
-    const teamMembers = await TeamMember.findByProject(params.id) as ITeamMemberDocument[];
+    const teamMembers = await TeamMember.findByProject(projectId) as ITeamMemberDocument[];
     const convertedMembers = teamMembers.map(convertToITeamMember);
 
     return NextResponse.json<IProjectApiResponse<ITeamMember[]>>({
@@ -116,7 +120,7 @@ export async function GET(
 // POST - Add team member
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -127,10 +131,14 @@ export async function POST(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const projectId = resolvedParams.id;
+
     await connectToDatabase();
 
     // Check if user can manage team
-    const canManage = await canManageTeam(params.id, session.user.id);
+    const canManage = await canManageTeam(projectId, session.user.id);
     if (!canManage) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -164,7 +172,7 @@ export async function POST(
 
     // Check if employee is already a team member
     const existingMember = await TeamMember.findOne({
-      projectId: params.id,
+      projectId: projectId,
       employeeId,
       isActive: true
     });
@@ -216,7 +224,7 @@ export async function POST(
     }
 
     const teamMemberData = {
-      projectId: params.id,
+      projectId: projectId,
       employeeId,
       employeeName: employeeDetails.name,
       employeeEmail: employeeDetails.email,
@@ -230,7 +238,7 @@ export async function POST(
 
     // Create activity log
     await ProjectActivity.create({
-      projectId: params.id,
+      projectId: projectId,
       activityType: 'member-added',
       description: `${employeeDetails.name} was added to the project as ${role}`,
       performedBy: session.user.id,

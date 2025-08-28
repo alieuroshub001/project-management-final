@@ -17,11 +17,11 @@ import {
 } from '@/types/profile';
 
 // Helper function to convert Mongoose document to IEmployeeProfile
-function convertToIEmployeeProfile(doc: IEmployeeProfileDocument): IEmployeeProfile {
+function convertToIEmployeeProfile(doc: IEmployeeProfileDocument): IEmployeeProfile | null {
   if (!doc) return null;
   
   return {
-    id: doc._id.toString(),
+    id: (doc._id as any).toString(),
     employeeId: doc.employeeId,
     userId: doc.userId.toString(),
     firstName: doc.firstName,
@@ -141,9 +141,17 @@ export async function GET(request: NextRequest) {
       }, { status: 404 });
     }
 
-    let responseData: IEmployeeProfile | IProfileWithDetails = convertToIEmployeeProfile(profile);
+    const convertedProfile = convertToIEmployeeProfile(profile);
+    if (!convertedProfile) {
+      return NextResponse.json<IProfileApiResponse>({
+        success: false,
+        message: 'Error converting profile data'
+      }, { status: 500 });
+    }
 
-    if (includeDetails && responseData) {
+    let responseData: IEmployeeProfile | IProfileWithDetails = convertedProfile;
+
+    if (includeDetails) {
       console.log('Including additional details'); // Debug log
       
       try {
@@ -177,13 +185,13 @@ export async function GET(request: NextRequest) {
         ]);
 
         const profileWithDetails: IProfileWithDetails = {
-          ...responseData,
+          ...convertedProfile,
           reportingManagerDetails: reportingManagerDetails.status === 'fulfilled' && reportingManagerDetails.value ? 
-            convertToIEmployeeProfile(reportingManagerDetails.value) : undefined,
+            convertToIEmployeeProfile(reportingManagerDetails.value) || undefined : undefined,
           teamMembers: teamMembers.status === 'fulfilled' ? 
-            teamMembers.value?.map(convertToIEmployeeProfile).filter(Boolean) : [],
+            teamMembers.value?.map(convertToIEmployeeProfile).filter((p): p is IEmployeeProfile => p !== null) : [],
           upcomingBirthdays: upcomingBirthdays.status === 'fulfilled' ? 
-            upcomingBirthdays.value?.map(convertToIEmployeeProfile).filter(Boolean) : [],
+            upcomingBirthdays.value?.map(convertToIEmployeeProfile).filter((p): p is IEmployeeProfile => p !== null) : [],
           yearsOfService: profile.getYearsOfService ? profile.getYearsOfService() : 0
         };
 
@@ -279,11 +287,19 @@ export async function POST(request: NextRequest) {
     };
 
     const profile = await EmployeeProfile.create(profileData);
+    const convertedProfile = convertToIEmployeeProfile(profile);
+    
+    if (!convertedProfile) {
+      return NextResponse.json<IProfileApiResponse>({
+        success: false,
+        message: 'Error creating profile'
+      }, { status: 500 });
+    }
 
     return NextResponse.json<IProfileApiResponse<IEmployeeProfile>>({
       success: true,
       message: 'Profile created successfully',
-      data: convertToIEmployeeProfile(profile)
+      data: convertedProfile
     }, { status: 201 });
 
   } catch (error) {
@@ -366,10 +382,18 @@ export async function PUT(request: NextRequest) {
       }, { status: 500 });
     }
 
+    const convertedProfile = convertToIEmployeeProfile(updatedProfile);
+    if (!convertedProfile) {
+      return NextResponse.json<IProfileApiResponse>({
+        success: false,
+        message: 'Error converting updated profile data'
+      }, { status: 500 });
+    }
+
     return NextResponse.json<IProfileApiResponse<IEmployeeProfile>>({
       success: true,
       message: 'Profile updated successfully',
-      data: convertToIEmployeeProfile(updatedProfile)
+      data: convertedProfile
     });
 
   } catch (error) {

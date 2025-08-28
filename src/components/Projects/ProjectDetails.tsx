@@ -1,4 +1,4 @@
-// components/Employee/Projects/ProjectDetails.tsx (Updated with complete integration)
+// components/Employee/Projects/ProjectDetails.tsx (Fixed prop passing)
 "use client";
 import { useState, useEffect } from 'react';
 import { 
@@ -309,7 +309,7 @@ export default function ProjectDetails({ projectId, onBack }: ProjectDetailsProp
           {activeTab === 'files' && (
             <ProjectFiles 
               projectId={project.id}
-              files={project.attachments || []}
+              attachments={project.attachments || []}
               onRefresh={fetchProject}
             />
           )}

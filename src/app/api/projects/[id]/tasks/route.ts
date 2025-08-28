@@ -78,7 +78,7 @@ async function hasProjectAccess(projectId: string, userId: string): Promise<bool
 // GET - List tasks for a project
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -89,10 +89,14 @@ export async function GET(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const projectId = resolvedParams.id;
+
     await connectToDatabase();
 
     // Check project access
-    const hasAccess = await hasProjectAccess(params.id, session.user.id);
+    const hasAccess = await hasProjectAccess(projectId, session.user.id);
     if (!hasAccess) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -116,7 +120,7 @@ export async function GET(
     const isOverdue = searchParams.get('isOverdue');
 
     // Build filter object
-    const filter: any = { projectId: params.id };
+    const filter: any = { projectId: projectId };
     
     if (status.length > 0) filter.status = { $in: status };
     if (priority.length > 0) filter.priority = { $in: priority };
@@ -179,7 +183,7 @@ export async function GET(
 // POST - Create new task
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -190,10 +194,14 @@ export async function POST(
       }, { status: 401 });
     }
 
+    // Await the params promise
+    const resolvedParams = await params;
+    const projectId = resolvedParams.id;
+
     await connectToDatabase();
 
     // Check project access and permissions
-    const hasAccess = await hasProjectAccess(params.id, session.user.id);
+    const hasAccess = await hasProjectAccess(projectId, session.user.id);
     if (!hasAccess) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -203,13 +211,13 @@ export async function POST(
 
     // Check if user has permission to create tasks
     const teamMember = await TeamMember.findOne({
-      projectId: params.id,
+      projectId: projectId,
       employeeId: session.user.id,
       isActive: true
     });
 
     if (!teamMember?.hasPermission('create-tasks')) {
-      const project = await Project.findById(params.id);
+      const project = await Project.findById(projectId);
       if (!project || (project.createdBy.toString() !== session.user.id && project.projectManager.toString() !== session.user.id)) {
         return NextResponse.json<IProjectApiResponse>({
           success: false,
@@ -246,7 +254,7 @@ export async function POST(
     // Validate assignee is team member if provided
     if (assignedTo) {
       const assigneeMember = await TeamMember.findOne({
-        projectId: params.id,
+        projectId: projectId,
         employeeId: assignedTo,
         isActive: true
       });
@@ -261,7 +269,7 @@ export async function POST(
 
     // Validate parent task exists if provided
     if (parentTaskId) {
-      const parentTask = await Task.findOne({ _id: parentTaskId, projectId: params.id });
+      const parentTask = await Task.findOne({ _id: parentTaskId, projectId: projectId });
       if (!parentTask) {
         return NextResponse.json<IProjectApiResponse>({
           success: false,
@@ -274,7 +282,7 @@ export async function POST(
     if (dependencies && dependencies.length > 0) {
       const dependentTasks = await Task.find({ 
         _id: { $in: dependencies }, 
-        projectId: params.id 
+        projectId: projectId 
       });
       
       if (dependentTasks.length !== dependencies.length) {
@@ -286,7 +294,7 @@ export async function POST(
     }
 
     const taskData = {
-      projectId: params.id,
+      projectId: projectId,
       title,
       description,
       priority,
@@ -315,7 +323,7 @@ export async function POST(
 
     // Create activity log
     await ProjectActivity.create({
-      projectId: params.id,
+      projectId: projectId,
       activityType: 'task-created',
       description: `Task "${title}" was created`,
       performedBy: session.user.id,
@@ -327,7 +335,7 @@ export async function POST(
     // Create assignment activity if assigned
     if (assignedTo && assignedTo !== session.user.id) {
       await ProjectActivity.create({
-        projectId: params.id,
+        projectId: projectId,
         activityType: 'task-assigned',
         description: `Task "${title}" was assigned to ${teamMember?.employeeName}`,
         performedBy: session.user.id,

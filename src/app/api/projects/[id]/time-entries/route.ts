@@ -59,7 +59,7 @@ async function hasProjectAccess(projectId: string, userId: string): Promise<bool
 // GET - List time entries for a project
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -72,8 +72,11 @@ export async function GET(
 
     await connectToDatabase();
 
+    // Await the params promise
+    const { id } = await params;
+
     // Check project access
-    const hasAccess = await hasProjectAccess(params.id, session.user.id);
+    const hasAccess = await hasProjectAccess(id, session.user.id);
     if (!hasAccess) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -94,7 +97,7 @@ export async function GET(
     const isBillable = searchParams.get('isBillable');
 
     // Build filter object
-    const filter: any = { projectId: params.id };
+    const filter: any = { projectId: id };
     
     if (employeeId) filter.employeeId = employeeId;
     if (taskId) filter.taskId = taskId;
@@ -158,7 +161,7 @@ export async function GET(
 // POST - Create new time entry
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -171,8 +174,11 @@ export async function POST(
 
     await connectToDatabase();
 
+    // Await the params promise
+    const { id } = await params;
+
     // Check project access and permissions
-    const hasAccess = await hasProjectAccess(params.id, session.user.id);
+    const hasAccess = await hasProjectAccess(id, session.user.id);
     if (!hasAccess) {
       return NextResponse.json<IProjectApiResponse>({
         success: false,
@@ -182,13 +188,13 @@ export async function POST(
 
     // Check if user has permission to track time
     const teamMember = await TeamMember.findOne({
-      projectId: params.id,
+      projectId: id,
       employeeId: session.user.id,
       isActive: true
     });
 
     if (!teamMember?.hasPermission('track-time')) {
-      const project = await Project.findById(params.id);
+      const project = await Project.findById(id);
       if (!project || (project.createdBy.toString() !== session.user.id && project.projectManager.toString() !== session.user.id)) {
         return NextResponse.json<IProjectApiResponse>({
           success: false,
@@ -217,7 +223,7 @@ export async function POST(
 
     // Validate task belongs to project if provided
     if (taskId) {
-      const task = await Task.findOne({ _id: taskId, projectId: params.id });
+      const task = await Task.findOne({ _id: taskId, projectId: id });
       if (!task) {
         return NextResponse.json<IProjectApiResponse>({
           success: false,
@@ -264,7 +270,7 @@ export async function POST(
     }
 
     const timeEntryData = {
-      projectId: params.id,
+      projectId: id,
       taskId: taskId || undefined,
       employeeId: session.user.id,
       employeeName: session.user.name,
@@ -286,7 +292,7 @@ export async function POST(
 
     // Create activity log
     await ProjectActivity.create({
-      projectId: params.id,
+      projectId: id,
       activityType: 'time-logged',
       description: `${Math.round(calculatedDuration / 60 * 10) / 10} hours logged${taskId ? ' for task' : ''}`,
       performedBy: session.user.id,

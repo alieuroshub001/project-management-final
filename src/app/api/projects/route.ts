@@ -200,13 +200,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Set project manager (default to creator if not specified)
-    const managerId = projectManager || session.user.id;
-    const managerName = projectManager ? 
-      (await import('@/models/User')).default.findById(projectManager)?.name || session.user.name :
-      session.user.name;
-    const managerEmail = projectManager ?
-      (await import('@/models/User')).default.findById(projectManager)?.email || session.user.email :
-      session.user.email;
+    let managerId = projectManager || session.user.id;
+    let managerName = session.user.name;
+    let managerEmail = session.user.email;
+
+    // If a different project manager is specified, fetch their details
+    if (projectManager && projectManager !== session.user.id) {
+      try {
+        const User = (await import('@/models/User')).default;
+        const manager = await User.findById(projectManager).lean();
+        if (manager) {
+          managerName = manager.name;
+          managerEmail = manager.email;
+        } else {
+          return NextResponse.json<IProjectApiResponse>({
+            success: false,
+            message: 'Project manager not found'
+          }, { status: 400 });
+        }
+      } catch (error) {
+        console.error('Error fetching project manager:', error);
+        // Fall back to session user
+        managerId = session.user.id;
+        managerName = session.user.name;
+        managerEmail = session.user.email;
+      }
+    }
 
     const projectData = {
       name,
@@ -270,7 +289,7 @@ export async function POST(request: NextRequest) {
       performedBy: session.user.id,
       performedByName: session.user.name,
       entityType: 'project',
-      entityId: project._id.toString()
+      entityId: (project._id as any).toString()
     });
 
     // TODO: If templateId provided, create tasks and milestones from template
