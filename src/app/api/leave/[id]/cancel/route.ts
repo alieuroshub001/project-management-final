@@ -9,7 +9,7 @@ import { authOptions } from '@/lib/auth';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -22,8 +22,11 @@ export async function POST(
 
     await connectToDatabase();
     
+    // Await the params object
+    const { id } = await params;
+    
     const leave = await Leave.findOne({
-      _id: params.id,
+      _id: id,
       employeeId: session.user.id
     }) as ILeaveDocument | null;
 
@@ -43,7 +46,7 @@ export async function POST(
     }
 
     const cancelledLeave = await Leave.findByIdAndUpdate(
-      params.id,
+      id,
       { status: 'cancelled' },
       { new: true }
     ) as ILeaveDocument | null;
