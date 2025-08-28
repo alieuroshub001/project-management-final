@@ -1,6 +1,6 @@
-// components/Employee/Projects/ProjectTeam.tsx (Updated with Modal Integration)
+// components/Employee/Projects/ProjectTeam.tsx (Updated with Profile Images)
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ITeamMember } from '@/types/projectmanagement';
 import { formatDate, formatDistanceToNow } from '@/utils/dateUtils';
 import TeamMemberAddModal from './TeamMemberAddModal';
@@ -15,17 +15,79 @@ import {
   Shield,
   Star,
   MoreVertical,
-  Settings
+  Settings,
+  User
 } from 'lucide-react';
 
 interface ProjectTeamProps {
   projectId: string;
   teamMembers: ITeamMember[];
   onRefresh: () => void;
+  // Optional: Pass profiles directly to avoid API calls
+  memberProfiles?: { [email: string]: { profileImage?: { secure_url: string } } };
+}
+
+interface TeamMemberWithProfile extends ITeamMember {
+  profileImage?: {
+    secure_url: string;
+  };
 }
 
 export default function ProjectTeam({ projectId, teamMembers = [], onRefresh }: ProjectTeamProps) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [membersWithProfiles, setMembersWithProfiles] = useState<TeamMemberWithProfile[]>([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(true);
+
+  // Fetch profile images for team members
+  const fetchMemberProfiles = async () => {
+    try {
+      setLoadingProfiles(true);
+      
+      const updatedMembers = await Promise.all(
+        teamMembers.map(async (member) => {
+          try {
+            // Fetch profile data for each team member using their employee email
+            const response = await fetch(`/api/profile/by-email?email=${encodeURIComponent(member.employeeEmail)}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (response.ok) {
+              const profileData = await response.json();
+              if (profileData.success && profileData.data?.profileImage) {
+                return {
+                  ...member,
+                  profileImage: profileData.data.profileImage
+                } as TeamMemberWithProfile;
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to fetch profile for ${member.employeeEmail}:`, error);
+          }
+          
+          return member as TeamMemberWithProfile;
+        })
+      );
+
+      setMembersWithProfiles(updatedMembers);
+    } catch (error) {
+      console.error('Error fetching team member profiles:', error);
+      setMembersWithProfiles(teamMembers as TeamMemberWithProfile[]);
+    } finally {
+      setLoadingProfiles(false);
+    }
+  };
+
+  useEffect(() => {
+    if (teamMembers.length > 0) {
+      fetchMemberProfiles();
+    } else {
+      setMembersWithProfiles([]);
+      setLoadingProfiles(false);
+    }
+  }, [teamMembers]);
 
   const getRoleIcon = (role: string) => {
     const icons = {
@@ -69,13 +131,73 @@ export default function ProjectTeam({ projectId, teamMembers = [], onRefresh }: 
     );
   };
 
-  const activeMembers = teamMembers.filter(member => member.isActive);
-  const inactiveMembers = teamMembers.filter(member => !member.isActive);
+  const renderMemberAvatar = (member: TeamMemberWithProfile) => {
+    if (member.profileImage?.secure_url) {
+      return (
+        <img
+          src={member.profileImage.secure_url}
+          alt={member.employeeName}
+          className="w-12 h-12 rounded-full object-cover"
+        />
+      );
+    }
+    
+    return (
+      <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
+        <span className="text-indigo-600 dark:text-indigo-400 font-medium text-lg">
+          {member.employeeName.charAt(0).toUpperCase()}
+        </span>
+      </div>
+    );
+  };
+
+  const renderInactiveMemberAvatar = (member: TeamMemberWithProfile) => {
+    if (member.profileImage?.secure_url) {
+      return (
+        <img
+          src={member.profileImage.secure_url}
+          alt={member.employeeName}
+          className="w-10 h-10 rounded-full object-cover grayscale"
+        />
+      );
+    }
+    
+    return (
+      <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+        <span className="text-gray-500 font-medium">
+          {member.employeeName.charAt(0).toUpperCase()}
+        </span>
+      </div>
+    );
+  };
+
+  const activeMembers = membersWithProfiles.filter(member => member.isActive);
+  const inactiveMembers = membersWithProfiles.filter(member => !member.isActive);
 
   const handleAddSuccess = () => {
     setShowAddModal(false);
     onRefresh();
   };
+
+  if (loadingProfiles) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Team Members</h2>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">Loading team members...</p>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            <span className="ml-2 text-gray-500 dark:text-gray-400">Loading profiles...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -117,11 +239,7 @@ export default function ProjectTeam({ projectId, teamMembers = [], onRefresh }: 
                   <div key={member.id} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-6 hover:shadow-md transition-all duration-200">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
-                          <span className="text-indigo-600 dark:text-indigo-400 font-medium text-lg">
-                            {member.employeeName.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
+                        {renderMemberAvatar(member)}
                         <div>
                           <h4 className="font-semibold text-gray-900 dark:text-white">
                             {member.employeeName}
@@ -209,11 +327,7 @@ export default function ProjectTeam({ projectId, teamMembers = [], onRefresh }: 
               {inactiveMembers.map((member) => (
                 <div key={member.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                      <span className="text-gray-500 font-medium">
-                        {member.employeeName.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
+                    {renderInactiveMemberAvatar(member)}
                     <div>
                       <p className="font-medium text-gray-900 dark:text-white">
                         {member.employeeName}

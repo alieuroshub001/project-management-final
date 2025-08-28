@@ -1,4 +1,4 @@
-// components/Employee/Projects/TeamMemberAddModal.tsx
+// components/Employee/Projects/TeamMemberAddModal.tsx (Enhanced with Profile Images)
 "use client";
 import { useState, useEffect } from 'react';
 import { 
@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Loader2,
   Search,
-  UserCheck
+  UserCheck,
+  User
 } from 'lucide-react';
 
 interface TeamMemberAddModalProps {
@@ -31,6 +32,9 @@ interface EmployeeOption {
   mobile: string;
   role: string;
   isAvailable: boolean;
+  profileImage?: {
+    secure_url: string;
+  };
 }
 
 interface IEmployeeSearchResponse {
@@ -56,6 +60,7 @@ export default function TeamMemberAddModal({
 
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -127,6 +132,28 @@ export default function TeamMemberAddModal({
     }
   };
 
+  // Fetch profile image for a specific employee
+  const fetchEmployeeProfile = async (email: string): Promise<{ secure_url: string } | undefined> => {
+    try {
+      const response = await fetch(`/api/profile/by-email?email=${encodeURIComponent(email)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const profileData = await response.json();
+        if (profileData.success && profileData.data?.profileImage) {
+          return profileData.data.profileImage;
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to fetch profile for ${email}:`, error);
+    }
+    return undefined;
+  };
+
   const searchEmployees = async (query: string) => {
     if (!query.trim() || query.length < 2) {
       setEmployees([]);
@@ -159,7 +186,22 @@ export default function TeamMemberAddModal({
         throw new Error(data.message || 'Failed to search employees');
       }
       
-      setEmployees(data.data?.employees || []);
+      const employeesData = data.data?.employees || [];
+      
+      // Fetch profile images for all employees
+      setProfileLoading(true);
+      const employeesWithProfiles = await Promise.all(
+        employeesData.map(async (employee) => {
+          const profileImage = await fetchEmployeeProfile(employee.email);
+          return {
+            ...employee,
+            profileImage
+          };
+        })
+      );
+      
+      setEmployees(employeesWithProfiles);
+      setProfileLoading(false);
       
     } catch (err) {
       console.error('Failed to search employees:', err);
@@ -175,6 +217,7 @@ export default function TeamMemberAddModal({
         setError('Failed to search employees. Please try again.');
       }
       setEmployees([]);
+      setProfileLoading(false);
     } finally {
       setSearchLoading(false);
     }
@@ -288,6 +331,33 @@ export default function TeamMemberAddModal({
     }
   };
 
+  // Render employee avatar
+  const renderEmployeeAvatar = (employee: EmployeeOption, size: 'sm' | 'md' | 'lg' = 'sm') => {
+    const sizeClasses = {
+      sm: 'w-8 h-8 text-sm',
+      md: 'w-10 h-10 text-base',
+      lg: 'w-12 h-12 text-lg'
+    };
+
+    if (employee.profileImage?.secure_url) {
+      return (
+        <img
+          src={employee.profileImage.secure_url}
+          alt={employee.name}
+          className={`${sizeClasses[size]} rounded-full object-cover flex-shrink-0`}
+        />
+      );
+    }
+    
+    return (
+      <div className={`${sizeClasses[size]} bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center flex-shrink-0`}>
+        <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+          {employee.name.charAt(0).toUpperCase()}
+        </span>
+      </div>
+    );
+  };
+
   const groupedPermissions = permissionOptions.reduce((groups, permission) => {
     const category = permission.category;
     if (!groups[category]) {
@@ -346,13 +416,14 @@ export default function TeamMemberAddModal({
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-colors"
                   minLength={2}
                 />
-                {searchLoading && (
+                {(searchLoading || profileLoading) && (
                   <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 animate-spin" />
                 )}
               </div>
               
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 Type at least 2 characters to search for employees
+                {profileLoading && <span className="ml-2 text-indigo-600">(Loading profiles...)</span>}
               </p>
 
               {/* Search Results */}
@@ -377,20 +448,16 @@ export default function TeamMemberAddModal({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mr-3">
-                            <span className="text-indigo-600 dark:text-indigo-400 font-medium text-sm">
-                              {employee.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900 dark:text-white">{employee.name}</p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">{employee.email}</p>
+                        <div className="flex items-center space-x-3">
+                          {renderEmployeeAvatar(employee, 'md')}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-gray-900 dark:text-white truncate">{employee.name}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{employee.email}</p>
                             <p className="text-xs text-gray-500 dark:text-gray-400">{employee.mobile}</p>
                           </div>
                         </div>
-                        <div className="flex items-center">
-                          <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-1 rounded-full mr-2">
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                          <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-1 rounded-full">
                             {employee.role}
                           </span>
                           {employee.isAvailable ? (
@@ -405,7 +472,7 @@ export default function TeamMemberAddModal({
                 </div>
               )}
 
-              {searchQuery.length >= 2 && employees.length === 0 && !searchLoading && (
+              {searchQuery.length >= 2 && employees.length === 0 && !searchLoading && !profileLoading && (
                 <div className="mt-3 text-center py-4 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg">
                   <UserCheck className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No employees found matching "{searchQuery}"</p>
@@ -423,19 +490,15 @@ export default function TeamMemberAddModal({
             {/* Selected Employee */}
             {selectedEmployee && (
               <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
-                <h4 className="font-medium text-indigo-900 dark:text-indigo-100 mb-2">Selected Employee</h4>
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mr-3">
-                    <span className="text-indigo-600 dark:text-indigo-400 font-medium">
-                      {selectedEmployee.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
+                <h4 className="font-medium text-indigo-900 dark:text-indigo-100 mb-3">Selected Employee</h4>
+                <div className="flex items-center space-x-4">
+                  {renderEmployeeAvatar(selectedEmployee, 'lg')}
+                  <div className="flex-1 min-w-0">
                     <p className="font-medium text-indigo-900 dark:text-indigo-100">{selectedEmployee.name}</p>
-                    <p className="text-sm text-indigo-700 dark:text-indigo-300">{selectedEmployee.email}</p>
+                    <p className="text-sm text-indigo-700 dark:text-indigo-300 truncate">{selectedEmployee.email}</p>
                     <p className="text-xs text-indigo-600 dark:text-indigo-400">{selectedEmployee.mobile}</p>
                     <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
-                      Role: {selectedEmployee.role}
+                      Current Role: {selectedEmployee.role}
                     </p>
                   </div>
                 </div>
