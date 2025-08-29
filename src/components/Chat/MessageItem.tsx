@@ -71,12 +71,12 @@ export default function MessageItem({ message, isOwn, showSender }: MessageItemP
             ) : (
               <div className="w-6 h-6 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
                 <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
-                  {message.senderName.charAt(0).toUpperCase()}
+                  {message.senderName?.charAt(0).toUpperCase() || '?'}
                 </span>
               </div>
             )}
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {message.senderName}
+              {message.senderName || 'Unknown User'}
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {formatMessageTime(message.createdAt)}
@@ -100,11 +100,17 @@ export default function MessageItem({ message, isOwn, showSender }: MessageItemP
                 : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
             }`}>
               <p className={`text-xs ${isOwn ? 'text-indigo-200' : 'text-gray-600 dark:text-gray-400'}`}>
-                Replying to {message.replyTo.senderName}
+                Replying to {message.replyTo.senderName || 'Unknown User'}
               </p>
               <p className={`text-sm ${isOwn ? 'text-indigo-100' : 'text-gray-800 dark:text-gray-300'}`}>
-                {message.replyTo.content.slice(0, 100)}
-                {message.replyTo.content.length > 100 && '...'}
+                {message.replyTo.content ? (
+                  <>
+                    {message.replyTo.content.slice(0, 100)}
+                    {message.replyTo.content.length > 100 && '...'}
+                  </>
+                ) : (
+                  'No content available'
+                )}
               </p>
             </div>
           )}
@@ -114,7 +120,7 @@ export default function MessageItem({ message, isOwn, showSender }: MessageItemP
             <div className={`mb-2 text-xs italic ${
               isOwn ? 'text-indigo-200' : 'text-gray-600 dark:text-gray-400'
             }`}>
-              Forwarded from {message.forwardedFrom.originalSenderName}
+              Forwarded from {message.forwardedFrom.originalSenderName || 'Unknown User'}
             </div>
           )}
 
@@ -138,18 +144,18 @@ export default function MessageItem({ message, isOwn, showSender }: MessageItemP
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    {attachment.file.resource_type === 'image' ? (
+                    {attachment.file?.resource_type === 'image' ? (
                       <div className="flex-1">
                         <img
                           src={attachment.file.secure_url}
-                          alt={attachment.fileName}
+                          alt={attachment.fileName || 'Image'}
                           className="max-w-full h-auto rounded"
                           style={{ maxHeight: '200px' }}
                         />
                         <p className={`text-xs mt-1 ${
                           isOwn ? 'text-indigo-200' : 'text-gray-600 dark:text-gray-400'
                         }`}>
-                          {attachment.fileName}
+                          {attachment.fileName || 'Image'}
                         </p>
                       </div>
                     ) : (
@@ -165,36 +171,42 @@ export default function MessageItem({ message, isOwn, showSender }: MessageItemP
                           <p className={`text-sm font-medium truncate ${
                             isOwn ? 'text-white' : 'text-gray-900 dark:text-white'
                           }`}>
-                            {attachment.fileName}
+                            {attachment.fileName || 'File'}
                           </p>
-                          <p className={`text-xs ${
-                            isOwn ? 'text-indigo-200' : 'text-gray-600 dark:text-gray-400'
-                          }`}>
-                            {(attachment.fileSize / 1024 / 1024).toFixed(2)} MB
-                          </p>
+                          {attachment.fileSize && (
+                            <p className={`text-xs ${
+                              isOwn ? 'text-indigo-200' : 'text-gray-600 dark:text-gray-400'
+                            }`}>
+                              {(attachment.fileSize / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          )}
                         </div>
                         <div className="flex space-x-1">
-                          <button
-                            onClick={() => window.open(attachment.file.secure_url, '_blank')}
-                            className={`p-1 rounded hover:bg-opacity-80 ${
-                              isOwn
-                                ? 'hover:bg-indigo-500'
-                                : 'hover:bg-gray-300 dark:hover:bg-gray-500'
-                            }`}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <a
-                            href={attachment.file.secure_url}
-                            download={attachment.fileName}
-                            className={`p-1 rounded hover:bg-opacity-80 ${
-                              isOwn
-                                ? 'hover:bg-indigo-500'
-                                : 'hover:bg-gray-300 dark:hover:bg-gray-500'
-                            }`}
-                          >
-                            <Download className="w-4 h-4" />
-                          </a>
+                          {attachment.file?.secure_url && (
+                            <>
+                              <button
+                                onClick={() => window.open(attachment.file.secure_url, '_blank')}
+                                className={`p-1 rounded hover:bg-opacity-80 ${
+                                  isOwn
+                                    ? 'hover:bg-indigo-500'
+                                    : 'hover:bg-gray-300 dark:hover:bg-gray-500'
+                                }`}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <a
+                                href={attachment.file.secure_url}
+                                download={attachment.fileName}
+                                className={`p-1 rounded hover:bg-opacity-80 ${
+                                  isOwn
+                                    ? 'hover:bg-indigo-500'
+                                    : 'hover:bg-gray-300 dark:hover:bg-gray-500'
+                                }`}
+                              >
+                                <Download className="w-4 h-4" />
+                              </a>
+                            </>
+                          )}
                         </div>
                       </>
                     )}
