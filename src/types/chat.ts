@@ -1,7 +1,6 @@
-// types/chat.ts
 import { IApiResponse, ISessionUser } from ".";
 
-// Cloudinary File Interface for Attachments
+// Cloudinary File Interfaces
 export interface ICloudinaryFile {
   public_id: string;
   secure_url: string;
@@ -14,83 +13,153 @@ export interface ICloudinaryFile {
   created_at: string;
 }
 
-// Core Chat Interfaces
-export interface IChat {
-  id: string;
-  name: string;
-  type: ChatType;
-  description?: string;
-  avatar?: ICloudinaryFile;
-  createdBy: string;
-  createdByName: string;
-  createdByEmail: string;
-  participants: string[]; // Changed to string[]
-  admins: string[]; // User IDs who are admins
-  lastMessage?: IMessage;
-  lastActivity: Date;
-  isArchived: boolean;
-  isPinned: boolean;
-  settings: IChatSettings;
-  createdAt: Date;
-  updatedAt: Date;
+export interface ICloudinaryUploadResponse {
+  public_id: string;
+  version: number;
+  signature: string;
+  width: number;
+  height: number;
+  format: string;
+  resource_type: string;
+  created_at: string;
+  tags: string[];
+  bytes: number;
+  type: string;
+  etag: string;
+  placeholder: boolean;
+  url: string;
+  secure_url: string;
+  original_filename: string;
 }
 
+export type FileUploadProgress = {
+  fileName: string;
+  progress: number;
+  status: 'uploading' | 'completed' | 'error';
+  error?: string;
+};
+
+export interface IFileUploadState {
+  files: FileUploadProgress[];
+  isUploading: boolean;
+  totalProgress: number;
+}
+
+export interface IFileUploadResponse {
+  success: boolean;
+  files: ICloudinaryFile[];
+  message?: string;
+}
+
+export interface IFileDeleteResponse {
+  success: boolean;
+  deletedFiles: string[];
+  message?: string;
+}
+
+// Core Chat Interfaces
+
+// Chat Participant Interface
 export interface IChatParticipant {
   id: string;
-  chatId: string;
   userId: string;
   userName: string;
   userEmail: string;
-  userAvatar?: ICloudinaryFile;
+  userMobile: string;
+  displayName?: string;
+  profileImage?: ICloudinaryFile;
   role: ParticipantRole;
+  permissions: ChatPermission[];
   joinedAt: Date;
   leftAt?: Date;
   isActive: boolean;
   isMuted: boolean;
+  mutedUntil?: Date;
+  lastSeenAt?: Date;
+  isOnline: boolean;
   lastReadMessageId?: string;
-  lastReadAt?: Date;
-  permissions: ChatPermission[];
+  unreadCount: number;
 }
 
+// Chat Room/Conversation Interface
+export interface IChat {
+  id: string;
+  name?: string; // For groups and channels
+  description?: string; // For groups and channels
+  chatType: ChatType;
+  createdBy: string;
+  createdByName: string;
+  createdByEmail: string;
+  participants: IChatParticipant[];
+  lastMessage?: IMessage;
+  lastActivity: Date;
+  isArchived: boolean;
+  isPinned: boolean;
+  pinnedBy?: string;
+  pinnedAt?: Date;
+  settings: IChatSettings;
+  totalMessages: number;
+  unreadCount: number;
+  avatar?: ICloudinaryFile; // For group/channel avatar
+  coverImage?: ICloudinaryFile;
+  tags?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Message Interface
 export interface IMessage {
   id: string;
   chatId: string;
   senderId: string;
   senderName: string;
   senderEmail: string;
-  senderAvatar?: ICloudinaryFile;
+  senderProfileImage?: ICloudinaryFile;
   content: string;
   messageType: MessageType;
-  replyToMessageId?: string; // For reply functionality
-  mentions: string[]; // User IDs mentioned in message
-  attachments: IMessageAttachment[];
+  attachments?: IMessageAttachment[];
+  replyTo?: IMessageReply;
+  forwardedFrom?: IMessageForward;
   reactions: IMessageReaction[];
-  isEdited: boolean;
-  editedAt?: Date;
-  isDeleted: boolean;
-  deletedAt?: Date;
-  deliveredTo: IMessageDelivery[];
-  readBy: IMessageRead[];
+  mentions: IMessageMention[];
   isPinned: boolean;
   pinnedBy?: string;
   pinnedAt?: Date;
-  metadata?: Record<string, any>; // For polls, announcements, etc.
+  pinnedReason?: string;
+  isEdited: boolean;
+  editedAt?: Date;
+  editHistory?: IMessageEdit[];
+  isDeleted: boolean;
+  deletedAt?: Date;
+  deletedBy?: string;
+  deletedFor: DeletedForType;
+  deliveryStatus: MessageDeliveryStatus;
+  readBy: IMessageReadReceipt[];
+  threadId?: string; // For threaded replies
+  threadRepliesCount: number;
+  lastThreadReply?: Date;
+  metadata?: Record<string, any>; // For system messages or custom data
   createdAt: Date;
   updatedAt: Date;
 }
 
+// Message Attachment Interface
 export interface IMessageAttachment {
   id: string;
   messageId: string;
   file: ICloudinaryFile;
-  fileType: AttachmentType;
   fileName: string;
   fileSize: number;
-  description?: string;
+  mimeType: string;
+  thumbnailUrl?: string;
+  previewUrl?: string;
+  downloadCount: number;
   uploadedBy: string;
-  uploadedAt: Date;
+  uploadedByName: string;
+  createdAt: Date;
 }
 
+// Message Reaction Interface
 export interface IMessageReaction {
   id: string;
   messageId: string;
@@ -100,178 +169,315 @@ export interface IMessageReaction {
   createdAt: Date;
 }
 
-export interface IMessageDelivery {
-  userId: string;
-  deliveredAt: Date;
+// Message Mention Interface
+export interface IMessageMention {
+  id: string;
+  messageId: string;
+  mentionedUserId: string;
+  mentionedUserName: string;
+  mentionedUserEmail: string;
+  mentionType: MentionType;
+  startIndex: number;
+  endIndex: number;
+  isRead: boolean;
+  readAt?: Date;
 }
 
-export interface IMessageRead {
+// Message Reply Interface
+export interface IMessageReply {
+  messageId: string;
+  content: string;
+  senderId: string;
+  senderName: string;
+  timestamp: Date;
+  attachmentCount: number;
+}
+
+// Message Forward Interface
+export interface IMessageForward {
+  originalMessageId: string;
+  originalChatId: string;
+  originalChatName?: string;
+  originalSenderId: string;
+  originalSenderName: string;
+  forwardedBy: string;
+  forwardedByName: string;
+  forwardedAt: Date;
+  forwardChain: number; // Track forward depth
+}
+
+// Message Edit History Interface
+export interface IMessageEdit {
+  id: string;
+  messageId: string;
+  previousContent: string;
+  newContent: string;
+  editedBy: string;
+  editedByName: string;
+  editReason?: string;
+  editedAt: Date;
+}
+
+// Message Read Receipt Interface
+export interface IMessageReadReceipt {
+  messageId: string;
   userId: string;
+  userName: string;
   readAt: Date;
 }
 
+// Chat Settings Interface
 export interface IChatSettings {
-  allowFileUploads: boolean;
-  allowPolls: boolean;
-  allowAnnouncements: boolean;
+  allowFileSharing: boolean;
+  allowReactions: boolean;
+  allowMentions: boolean;
+  allowForwarding: boolean;
+  allowPinning: boolean;
+  allowThreads: boolean;
+  allowEditing: boolean;
+  allowDeleting: boolean;
+  messageRetentionDays?: number; // Auto-delete messages after X days
   maxFileSize: number; // in MB
-  allowedFileTypes: AttachmentType[];
-  messageRetention: number; // days, 0 = unlimited
-  requireApprovalForNewMembers: boolean;
-  allowMembersToAddOthers: boolean;
-  allowMembersToCreatePolls: boolean;
+  allowedFileTypes: string[];
   muteNotifications: boolean;
+  mutedUntil?: Date;
+  customNotificationSound?: string;
+  theme?: ChatTheme;
+  language?: string;
+  timezone?: string;
 }
 
-// Poll System
-export interface IPoll {
+// User Chat Preferences Interface
+export interface IUserChatPreferences {
   id: string;
-  messageId: string;
-  chatId: string;
-  createdBy: string;
-  createdByName: string;
-  question: string;
-  options: IPollOption[];
-  allowMultipleVotes: boolean;
-  isAnonymous: boolean;
-  expiresAt?: Date;
-  isActive: boolean;
-  totalVotes: number;
+  userId: string;
+  enableNotifications: boolean;
+  enablePushNotifications: boolean;
+  enableEmailNotifications: boolean;
+  enableDesktopNotifications: boolean;
+  notificationSound: string;
+  messagePreview: boolean;
+  onlineStatus: OnlineStatus;
+  lastSeenPrivacy: LastSeenPrivacy;
+  profilePrivacy: ProfilePrivacy;
+  autoDownloadMedia: boolean;
+  autoDownloadDocuments: boolean;
+  theme: ChatTheme;
+  fontSize: FontSize;
+  language: string;
+  timezone: string;
+  blockedUsers: string[];
+  mutedChats: string[];
+  pinnedChats: string[];
+  archivedChats: string[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface IPollOption {
-  id: string;
-  pollId: string;
-  text: string;
-  voteCount: number;
-  voters: IPollVote[];
-}
-
-export interface IPollVote {
-  id: string;
-  pollId: string;
-  optionId: string;
-  userId: string;
-  userName: string;
-  votedAt: Date;
-}
-
-// Announcement System
-export interface IAnnouncement {
-  id: string;
-  messageId: string;
-  chatId: string;
-  createdBy: string;
-  createdByName: string;
-  title: string;
-  content: string;
-  priority: AnnouncementPriority;
-  targetAudience: string[]; // User IDs or 'all'
-  attachments: IMessageAttachment[];
-  acknowledgments: IAnnouncementAck[];
-  expiresAt?: Date;
-  isActive: boolean;
-  isPinned: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface IAnnouncementAck {
-  id: string;
-  announcementId: string;
-  userId: string;
-  userName: string;
-  acknowledgedAt: Date;
-}
-
-// Typing Indicator
-export interface ITypingIndicator {
-  chatId: string;
-  userId: string;
-  userName: string;
-  startedAt: Date;
-  lastActivity: Date;
-}
-
-// Chat Activity Log
+// Chat Activity Interface
 export interface IChatActivity {
   id: string;
   chatId: string;
   activityType: ChatActivityType;
   performedBy: string;
   performedByName: string;
-  targetUserId?: string; // For member-related activities
+  targetUserId?: string;
   targetUserName?: string;
   description: string;
   metadata?: Record<string, any>;
-  createdAt: Date;
+  timestamp: Date;
 }
 
-// Notification System
-export interface IChatNotification {
+// Announcement Interface
+export interface IAnnouncement {
   id: string;
-  userId: string;
-  chatId: string;
-  messageId?: string;
-  notificationType: NotificationType;
+  chatId?: string; // If null, it's a global announcement
   title: string;
   content: string;
-  isRead: boolean;
-  readAt?: Date;
-  actionUrl?: string;
-  metadata?: Record<string, any>;
+  createdBy: string;
+  createdByName: string;
+  createdByEmail: string;
+  priority: AnnouncementPriority;
+  targetAudience: AnnouncementAudience;
+  targetUserIds?: string[]; // Specific users if audience is 'specific'
+  targetRoles?: string[]; // Specific roles if audience is 'role-based'
+  attachments?: ICloudinaryFile[];
+  isActive: boolean;
+  isPinned: boolean;
+  pinnedUntil?: Date;
+  readBy: IAnnouncementReadReceipt[];
+  totalRecipientsCount: number;
+  readRecipientsCount: number;
+  scheduledFor?: Date;
+  expiresAt?: Date;
   createdAt: Date;
+  updatedAt: Date;
+}
+
+// Announcement Read Receipt Interface
+export interface IAnnouncementReadReceipt {
+  announcementId: string;
+  userId: string;
+  userName: string;
+  readAt: Date;
+}
+
+// Chat Search Interface
+export interface IChatSearch {
+  query: string;
+  chatId?: string;
+  senderId?: string;
+  messageType?: MessageType;
+  hasAttachments?: boolean;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+  offset?: number;
+}
+
+// Chat Search Result Interface
+export interface IChatSearchResult {
+  messages: IMessage[];
+  totalCount: number;
+  hasMore: boolean;
+  highlights: Record<string, string[]>;
+}
+
+// User Search Interface
+export interface IUserSearch {
+  query: string;
+  department?: string;
+  role?: string;
+  isOnline?: boolean;
+  excludeUserIds?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+// User Search Result Interface
+export interface IUserSearchResult {
+  users: ISearchableUser[];
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export interface ISearchableUser {
+  id: string;
+  name: string;
+  email: string;
+  mobile: string;
+  displayName?: string;
+  designation?: string;
+  department?: string;
+  profileImage?: ICloudinaryFile;
+  isOnline: boolean;
+  lastSeenAt?: Date;
+  mutualChats: number;
+}
+
+// Chat Statistics Interface
+export interface IChatStatistics {
+  totalChats: number;
+  directMessages: number;
+  groupChats: number;
+  channels: number;
+  totalMessages: number;
+  totalAttachments: number;
+  totalStorage: number; // in bytes
+  messagesThisWeek: number;
+  messagesThisMonth: number;
+  mostActiveChat: {
+    chatId: string;
+    chatName: string;
+    messageCount: number;
+  };
+  mostActiveUser: {
+    userId: string;
+    userName: string;
+    messageCount: number;
+  };
 }
 
 // Enums and Types
 export type ChatType = 
-  | 'direct'        // 1-on-1 chat
-  | 'group'         // Group chat
-  | 'channel'       // Public/semi-public channel
-  | 'announcement'; // Announcement-only channel
-
-export type ParticipantRole = 
-  | 'owner'         // Chat creator (cannot be changed)
-  | 'admin'         // Can manage chat and members
-  | 'moderator'     // Can manage messages and moderate
-  | 'member'        // Regular participant
-  | 'guest';        // Limited access participant
+  | 'direct'     // 1-on-1 conversation
+  | 'group'      // Group chat with multiple participants
+  | 'channel'    // Broadcast channel
+  | 'announcement'; // Announcement only channel
 
 export type MessageType = 
   | 'text'
-  | 'file'
   | 'image'
-  | 'video'
-  | 'audio'
-  | 'poll'
-  | 'announcement'
-  | 'system'        // System-generated messages
-  | 'reply';
-
-export type AttachmentType = 
-  | 'image'
-  | 'video'
-  | 'audio'
   | 'document'
-  | 'spreadsheet'
-  | 'presentation'
-  | 'archive'
-  | 'other';
+  | 'audio'
+  | 'video'
+  | 'link'
+  | 'location'
+  | 'contact'
+  | 'system'     // System generated messages
+  | 'announcement'
+  | 'poll'
+  | 'event';
+
+export type ParticipantRole = 
+  | 'member'
+  | 'admin'
+  | 'moderator'
+  | 'owner'
+  | 'guest';
 
 export type ChatPermission = 
   | 'send-messages'
-  | 'send-files'
-  | 'create-polls'
+  | 'send-attachments'
+  | 'delete-own-messages'
+  | 'delete-any-messages'
+  | 'edit-own-messages'
+  | 'edit-any-messages'
   | 'pin-messages'
-  | 'delete-messages'
-  | 'edit-messages'
-  | 'mention-all'
-  | 'add-members'
-  | 'remove-members'
-  | 'manage-chat'
+  | 'react-to-messages'
+  | 'mention-users'
+  | 'add-participants'
+  | 'remove-participants'
+  | 'edit-chat-info'
+  | 'manage-permissions'
   | 'create-announcements';
+
+export type MessageDeliveryStatus = 
+  | 'sending'
+  | 'sent'
+  | 'delivered'
+  | 'read'
+  | 'failed';
+
+export type DeletedForType = 
+  | 'none'       // Not deleted
+  | 'sender'     // Deleted for sender only
+  | 'everyone';  // Deleted for everyone
+
+export type MentionType = 
+  | 'user'       // @username
+  | 'everyone'   // @everyone
+  | 'here';      // @here (online users)
+
+export type ChatActivityType = 
+  | 'chat-created'
+  | 'participant-added'
+  | 'participant-removed'
+  | 'participant-left'
+  | 'participant-promoted'
+  | 'participant-demoted'
+  | 'chat-renamed'
+  | 'chat-description-changed'
+  | 'chat-avatar-changed'
+  | 'chat-settings-changed'
+  | 'message-pinned'
+  | 'message-unpinned'
+  | 'chat-archived'
+  | 'chat-unarchived'
+  | 'announcement-created'
+  | 'announcement-updated'
+  | 'user-muted'
+  | 'user-unmuted';
 
 export type AnnouncementPriority = 
   | 'low'
@@ -279,106 +485,150 @@ export type AnnouncementPriority =
   | 'high'
   | 'urgent';
 
-export type ChatActivityType = 
-  | 'chat-created'
-  | 'chat-updated'
-  | 'member-added'
-  | 'member-removed'
-  | 'member-promoted'
-  | 'member-demoted'
-  | 'member-muted'
-  | 'member-unmuted'
-  | 'message-pinned'
-  | 'message-unpinned'
-  | 'message-deleted'
-  | 'poll-created'
-  | 'poll-closed'
-  | 'announcement-created'
-  | 'chat-archived'
-  | 'chat-unarchived';
+export type AnnouncementAudience = 
+  | 'everyone'
+  | 'specific'     // Specific users
+  | 'role-based'   // Based on roles/departments
+  | 'chat-members'; // Members of specific chat
 
-export type NotificationType = 
-  | 'new-message'
-  | 'mention'
-  | 'reply'
-  | 'reaction'
-  | 'poll-created'
-  | 'poll-vote'
-  | 'announcement'
-  | 'member-added'
-  | 'member-removed'
-  | 'role-changed';
+export type OnlineStatus = 
+  | 'online'
+  | 'offline'
+  | 'away'
+  | 'busy'
+  | 'invisible';
+
+export type LastSeenPrivacy = 
+  | 'everyone'
+  | 'contacts'
+  | 'nobody';
+
+export type ProfilePrivacy = 
+  | 'everyone'
+  | 'contacts'
+  | 'nobody';
+
+export type ChatTheme = 
+  | 'light'
+  | 'dark'
+  | 'auto'
+  | 'custom';
+
+export type FontSize = 
+  | 'small'
+  | 'medium'
+  | 'large'
+  | 'extra-large';
 
 // Request Interfaces
 export interface IChatCreateRequest {
-  name: string;
-  type: ChatType;
+  name?: string;
   description?: string;
-  participants: string[]; // User IDs
-  admins?: string[]; // Added admins field
-  isPrivate?: boolean;
-  settings?: Partial<IChatSettings>;
+  chatType: ChatType;
+  participantIds: string[];
   avatar?: File;
+  cloudinaryAvatar?: ICloudinaryFile;
+  settings?: Partial<IChatSettings>;
+  isPrivate?: boolean;
 }
 
 export interface IChatUpdateRequest {
   name?: string;
   description?: string;
   avatar?: File;
+  cloudinaryAvatar?: ICloudinaryFile;
   settings?: Partial<IChatSettings>;
-  removeAvatar?: boolean;
+  filesToDelete?: string[];
 }
 
 export interface IMessageSendRequest {
   chatId: string;
   content: string;
-  messageType?: MessageType;
-  replyToMessageId?: string;
-  mentions?: string[];
+  messageType: MessageType;
   attachments?: File[];
   cloudinaryAttachments?: ICloudinaryFile[];
+  replyToMessageId?: string;
+  mentions?: string[];
+  scheduledFor?: Date;
 }
 
 export interface IMessageUpdateRequest {
   content: string;
+  attachments?: File[];
+  cloudinaryAttachments?: ICloudinaryFile[];
   mentions?: string[];
+  filesToDelete?: string[];
+}
+
+export interface IMessageForwardRequest {
+  messageIds: string[];
+  targetChatIds: string[];
+  includeAttachments: boolean;
+  addComment?: string;
 }
 
 export interface IParticipantAddRequest {
+  chatId: string;
   userIds: string[];
   role?: ParticipantRole;
+  permissions?: ChatPermission[];
+  welcomeMessage?: string;
 }
 
 export interface IParticipantUpdateRequest {
   role?: ParticipantRole;
   permissions?: ChatPermission[];
   isMuted?: boolean;
+  mutedUntil?: Date;
 }
 
-export interface IPollCreateRequest {
-  chatId: string;
-  question: string;
-  options: string[];
-  allowMultipleVotes?: boolean;
-  isAnonymous?: boolean;
-  expiresIn?: number; // hours
+export interface IReactionAddRequest {
+  messageId: string;
+  emoji: string;
 }
 
-export interface IPollVoteRequest {
-  pollId: string;
-  optionIds: string[];
+export interface IMessagePinRequest {
+  messageId: string;
+  reason?: string;
 }
 
 export interface IAnnouncementCreateRequest {
-  chatId: string;
+  chatId?: string;
   title: string;
   content: string;
   priority: AnnouncementPriority;
-  targetAudience?: string[]; // If empty, targets all members
+  targetAudience: AnnouncementAudience;
+  targetUserIds?: string[];
+  targetRoles?: string[];
   attachments?: File[];
   cloudinaryAttachments?: ICloudinaryFile[];
-  expiresIn?: number; // hours
-  isPinned?: boolean;
+  scheduledFor?: Date;
+  expiresAt?: Date;
+}
+
+export interface IAnnouncementUpdateRequest {
+  title?: string;
+  content?: string;
+  priority?: AnnouncementPriority;
+  attachments?: File[];
+  cloudinaryAttachments?: ICloudinaryFile[];
+  expiresAt?: Date;
+  filesToDelete?: string[];
+}
+
+export interface IChatPreferencesUpdateRequest {
+  enableNotifications?: boolean;
+  enablePushNotifications?: boolean;
+  enableEmailNotifications?: boolean;
+  notificationSound?: string;
+  messagePreview?: boolean;
+  onlineStatus?: OnlineStatus;
+  lastSeenPrivacy?: LastSeenPrivacy;
+  profilePrivacy?: ProfilePrivacy;
+  autoDownloadMedia?: boolean;
+  theme?: ChatTheme;
+  fontSize?: FontSize;
+  language?: string;
 }
 
 // Response Interfaces
@@ -387,190 +637,201 @@ export interface IChatApiResponse<T = unknown> extends IApiResponse<T> {
 }
 
 export interface IChatWithDetails extends IChat {
-  unreadCount: number;
-  mentionsCount: number;
+  participantDetails: IChatParticipant[];
+  pinnedMessages: IMessage[];
   recentMessages: IMessage[];
-  onlineParticipants: IChatParticipant[];
-  currentUserRole: ParticipantRole;
-  currentUserPermissions: ChatPermission[];
+  unreadMessages: IMessage[];
+  sharedMedia: IMessageAttachment[];
+  sharedDocuments: IMessageAttachment[];
 }
 
 export interface IMessageWithDetails extends IMessage {
-  sender: IChatParticipant;
+  chat?: IChat;
+  sender?: IChatParticipant;
   replyToMessage?: IMessage;
-  poll?: IPoll;
-  announcement?: IAnnouncement;
-  readByCount: number;
-  deliveredToCount: number;
+  threadReplies?: IMessage[];
+  forwardHistory?: IMessageForward[];
 }
 
+export interface IChatListResponse {
+  chats: IChat[];
+  totalCount: number;
+  unreadCount: number;
+  hasMore: boolean;
+}
+
+export interface IMessageListResponse {
+  messages: IMessage[];
+  totalCount: number;
+  hasMore: boolean;
+  hasOlder: boolean;
+}
+
+// Dashboard Interface
 export interface IChatDashboard {
   totalChats: number;
   unreadMessages: number;
-  totalMentions: number;
-  recentChats: IChatWithDetails[];
-  pinnedChats: IChatWithDetails[];
-  archivedChats: IChatWithDetails[];
+  directMessages: number;
+  groupChats: number;
+  channels: number;
+  announcements: IAnnouncement[];
+  recentChats: IChat[];
+  pinnedChats: IChat[];
+  onlineUsers: ISearchableUser[];
+  popularChats: Array<{
+    chatId: string;
+    chatName: string;
+    participantCount: number;
+    messageCount: number;
+  }>;
   recentActivity: IChatActivity[];
-  onlineUsers: number;
-  availableUsers: IUserStatus[];
 }
 
-export interface IUserStatus {
-  userId: string;
-  userName: string;
-  userEmail: string;
-  userAvatar?: ICloudinaryFile;
-  status: OnlineStatus;
-  lastSeen: Date;
-  currentActivity?: string;
-}
-
-export type OnlineStatus = 
-  | 'online'
-  | 'away'
-  | 'busy'
-  | 'offline';
-
-// Filter and Search Interfaces
-export interface IChatFilter {
-  type?: ChatType[];
-  isArchived?: boolean;
+// Utility Types
+export type ChatFilter = {
+  chatType?: ChatType[];
+  hasUnread?: boolean;
   isPinned?: boolean;
-  hasUnreadMessages?: boolean;
+  isArchived?: boolean;
   participantId?: string;
-  createdBy?: string;
   createdAfter?: Date;
-  createdBefore?: Date;
-}
+  lastActivityAfter?: Date;
+};
 
-export interface IMessageFilter {
-  chatId: string;
+export type MessageFilter = {
   senderId?: string;
   messageType?: MessageType[];
   hasAttachments?: boolean;
-  hasMentions?: boolean;
-  isUnread?: boolean;
-  sentAfter?: Date;
-  sentBefore?: Date;
-  searchQuery?: string;
-}
+  isPinned?: boolean;
+  startDate?: Date;
+  endDate?: Date;
+  hasReactions?: boolean;
+  mentionsUser?: string;
+};
 
-export interface IChatSearch {
-  query: string;
-  filters?: IChatFilter;
-  sortBy?: 'name' | 'lastActivity' | 'createdAt' | 'unreadCount';
-  sortOrder?: 'asc' | 'desc';
-  page?: number;
-  limit?: number;
-}
+export type ChatSortOption = {
+  sortBy: 'lastActivity' | 'name' | 'createdAt' | 'participantCount' | 'messageCount';
+  sortOrder: 'asc' | 'desc';
+};
 
-export interface IMessageSearch {
-  query: string;
-  chatIds?: string[];
-  filters?: IMessageFilter;
-  sortBy?: 'createdAt' | 'relevance';
-  sortOrder?: 'asc' | 'desc';
-  page?: number;
-  limit?: number;
-}
+export type MessageSortOption = {
+  sortBy: 'createdAt' | 'reactions' | 'replies';
+  sortOrder: 'asc' | 'desc';
+};
 
-// Analytics and Reports
-export interface IChatAnalytics {
+export type ChatCalendarEvent = {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
   chatId: string;
-  totalMessages: number;
-  totalParticipants: number;
-  activeParticipants: number;
-  messagesByDay: Array<{
-    date: Date;
-    count: number;
-  }>;
-  topSenders: Array<{
-    userId: string;
-    userName: string;
-    messageCount: number;
-    percentage: number;
-  }>;
-  messageTypes: Record<MessageType, number>;
-  attachmentStats: {
-    totalFiles: number;
-    totalSize: number;
-    typeBreakdown: Record<AttachmentType, number>;
-  };
-  pollStats: {
-    totalPolls: number;
-    averageParticipation: number;
-    mostPopularPoll: IPoll;
-  };
-  peakActivity: {
-    hour: number;
-    day: string;
-    count: number;
-  };
-}
+  chatName: string;
+  eventType: 'meeting' | 'deadline' | 'reminder' | 'announcement';
+  participants: string[];
+  description?: string;
+};
 
-// Real-time Events
-export interface IChatEvent {
-  eventType: ChatEventType;
+export type ChatNotification = {
+  id: string;
+  type: 'new-message' | 'mention' | 'reaction' | 'announcement' | 'participant-added';
   chatId: string;
-  userId?: string;
+  chatName: string;
+  senderId?: string;
+  senderName?: string;
+  content: string;
+  timestamp: Date;
+  isRead: boolean;
+  priority: 'low' | 'normal' | 'high';
+};
+
+export type ChatBackup = {
+  chatId: string;
+  chatName: string;
+  messages: IMessage[];
+  participants: IChatParticipant[];
+  attachments: IMessageAttachment[];
+  exportedAt: Date;
+  exportedBy: string;
+  format: 'json' | 'html' | 'pdf';
+};
+
+export type TypingIndicator = {
+  chatId: string;
+  userId: string;
+  userName: string;
+  startedAt: Date;
+  isActive: boolean;
+};
+
+export type OnlineUserStatus = {
+  userId: string;
+  status: OnlineStatus;
+  lastSeenAt: Date;
+  isTyping: boolean;
+  currentChatId?: string;
+};
+
+// Validation Types
+export type ChatValidation = {
+  canSendMessage: boolean;
+  canSendAttachment: boolean;
+  canDeleteMessage: boolean;
+  canEditMessage: boolean;
+  canPinMessage: boolean;
+  canAddParticipants: boolean;
+  canRemoveParticipants: boolean;
+  canEditChatInfo: boolean;
+  maxFileSize: number;
+  allowedFileTypes: string[];
+  message?: string;
+};
+
+export type MessageValidation = {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  contentLength: number;
+  maxContentLength: number;
+  attachmentCount: number;
+  maxAttachmentCount: number;
+  totalAttachmentSize: number;
+  maxAttachmentSize: number;
+};
+
+// Real-time Event Types
+export type ChatEvent = {
+  type: ChatEventType;
+  chatId: string;
+  userId: string;
   data: any;
   timestamp: Date;
-}
+};
 
 export type ChatEventType = 
   | 'message-sent'
-  | 'message-edited'
+  | 'message-updated'
   | 'message-deleted'
   | 'message-reaction-added'
   | 'message-reaction-removed'
+  | 'message-pinned'
+  | 'message-unpinned'
+  | 'participant-added'
+  | 'participant-removed'
+  | 'participant-updated'
+  | 'chat-updated'
   | 'typing-start'
   | 'typing-stop'
-  | 'user-joined'
-  | 'user-left'
-  | 'user-status-changed'
-  | 'chat-updated'
-  | 'poll-created'
-  | 'poll-voted'
-  | 'announcement-created'
-  | 'message-read'
-  | 'participant-added'
-  | 'participant-removed';
-
-// Utility Types
-export type ChatSummary = {
-  chatId: string;
-  chatName: string;
-  lastMessage: string;
-  lastActivity: Date;
-  unreadCount: number;
-  participantCount: number;
-};
-
-export type MessageThread = {
-  originalMessage: IMessage;
-  replies: IMessage[];
-  totalReplies: number;
-  lastReply: Date;
-};
-
-export type ChatInvite = {
-  id: string;
-  chatId: string;
-  invitedBy: string;
-  invitedEmail: string;
-  token: string;
-  expiresAt: Date;
-  isUsed: boolean;
-  usedAt?: Date;
-  usedBy?: string;
-};
+  | 'user-online'
+  | 'user-offline'
+  | 'announcement-created';
 
 // NextAuth module declarations
 declare module "next-auth" {
   interface Session {
     user: ISessionUser;
-    chatStatus?: IUserStatus;
+    chatPreferences?: IUserChatPreferences;
+    unreadChatsCount?: number;
+    onlineStatus?: OnlineStatus;
   }
   
   interface User {
@@ -580,7 +841,9 @@ declare module "next-auth" {
     mobile: string;
     role: 'employee';
     emailVerified: boolean;
-    chatStatus?: IUserStatus;
+    chatPreferences?: IUserChatPreferences;
+    unreadChatsCount?: number;
+    onlineStatus?: OnlineStatus;
   }
 }
 
@@ -592,6 +855,8 @@ declare module "next-auth/jwt" {
     mobile: string;
     role: 'employee';
     emailVerified: boolean;
-    chatStatus?: IUserStatus;
+    chatPreferences?: IUserChatPreferences;
+    unreadChatsCount?: number;
+    onlineStatus?: OnlineStatus;
   }
 }

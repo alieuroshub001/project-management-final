@@ -1,55 +1,61 @@
 // app/api/chat/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
-import { 
-  Chat, 
-  ChatParticipant, 
-  Message, 
-  ChatActivity,
-  IChatDocument, 
-  IChatParticipantDocument 
-} from '@/models/Chat';
+import Chat from '@/models/chat/Chat';
+import Message from '@/models/chat/Message';
+import ChatActivity from '@/models/chat/ChatActivity';
 import { 
   IChatUpdateRequest,
   IChatApiResponse, 
   IChat,
-  IChatWithDetails,
-  ChatType,
-  ParticipantRole,
-  ChatPermission
+  IChatWithDetails
 } from '@/types/chat';
 import { authOptions } from '@/lib/auth';
 
 // Helper function to convert Mongoose document to IChat
-function convertToIChat(doc: IChatDocument): IChat {
+function convertToIChat(doc: any): IChat {
   return {
-    id: (doc._id as string | { toString(): string }).toString(),
+    id: doc._id.toString(),
     name: doc.name,
-    type: doc.type as ChatType,
     description: doc.description,
-    avatar: doc.avatar,
+    chatType: doc.chatType,
     createdBy: doc.createdBy.toString(),
     createdByName: doc.createdByName,
     createdByEmail: doc.createdByEmail,
-    participants: doc.participants.map(p => p.toString()),
-    admins: doc.admins.map(a => a.toString()),
-    lastMessage: undefined,
+    participants: doc.participants.map((p: any) => ({
+      id: p.id,
+      userId: p.userId.toString(),
+      userName: p.userName,
+      userEmail: p.userEmail,
+      userMobile: p.userMobile,
+      displayName: p.displayName,
+      profileImage: p.profileImage,
+      role: p.role,
+      permissions: p.permissions,
+      joinedAt: p.joinedAt,
+      leftAt: p.leftAt,
+      isActive: p.isActive,
+      isMuted: p.isMuted,
+      mutedUntil: p.mutedUntil,
+      lastSeenAt: p.lastSeenAt,
+      isOnline: p.isOnline,
+      lastReadMessageId: p.lastReadMessageId,
+      unreadCount: p.unreadCount
+    })),
+    lastMessage: doc.lastMessage,
     lastActivity: doc.lastActivity,
     isArchived: doc.isArchived,
     isPinned: doc.isPinned,
-    settings: {
-      allowFileUploads: doc.settings.allowFileUploads,
-      allowPolls: doc.settings.allowPolls,
-      allowAnnouncements: doc.settings.allowAnnouncements,
-      maxFileSize: doc.settings.maxFileSize,
-      allowedFileTypes: doc.settings.allowedFileTypes as any,
-      messageRetention: doc.settings.messageRetention,
-      requireApprovalForNewMembers: doc.settings.requireApprovalForNewMembers,
-      allowMembersToAddOthers: doc.settings.allowMembersToAddOthers,
-      allowMembersToCreatePolls: doc.settings.allowMembersToCreatePolls,
-      muteNotifications: doc.settings.muteNotifications
-    },
+    pinnedBy: doc.pinnedBy,
+    pinnedAt: doc.pinnedAt,
+    settings: doc.settings,
+    totalMessages: doc.totalMessages,
+    unreadCount: doc.unreadCount,
+    avatar: doc.avatar,
+    coverImage: doc.coverImage,
+    tags: doc.tags,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt
   };
@@ -57,31 +63,8 @@ function convertToIChat(doc: IChatDocument): IChat {
 
 // Check if user has access to chat
 async function hasChatAccess(chatId: string, userId: string): Promise<boolean> {
-  const participant = await ChatParticipant.findOne({
-    chatId,
-    userId,
-    isActive: true
-  });
-  return !!participant;
-}
-
-// Check if user has specific permission
-async function hasPermission(chatId: string, userId: string, permission: ChatPermission): Promise<boolean> {
-  const participant = await ChatParticipant.findOne({
-    chatId,
-    userId,
-    isActive: true
-  });
-  
-  if (!participant) return false;
-  
-  // Check if user is chat creator/admin
   const chat = await Chat.findById(chatId);
-  if (chat && (chat.createdBy.toString() === userId || chat.isAdmin(userId))) {
-    return true;
-  }
-  
-  return participant.hasPermission(permission);
+  return chat ? chat.isParticipant(userId) : false;
 }
 
 // GET - Get single chat with details
@@ -101,10 +84,9 @@ export async function GET(
     await connectToDatabase();
 
     const params = await context.params;
-    const chatId = params.id;
 
     // Check access
-    const hasAccess = await hasChatAccess(chatId, session.user.id);
+    const hasAccess = await hasChatAccess(params.id, session.user.id);
     if (!hasAccess) {
       return NextResponse.json<IChatApiResponse>({
         success: false,
@@ -112,7 +94,7 @@ export async function GET(
       }, { status: 404 });
     }
 
-    const chat = await Chat.findById(chatId) as IChatDocument | null;
+    const chat = await Chat.findById(params.id).populate('lastMessageId');
     if (!chat) {
       return NextResponse.json<IChatApiResponse>({
         success: false,
@@ -120,117 +102,278 @@ export async function GET(
       }, { status: 404 });
     }
 
-    // Get additional details
-    const [participants, recentMessages, recentActivity, currentUserParticipant] = await Promise.all([
-      ChatParticipant.find({ chatId, isActive: true }).populate('userId', 'name email mobile'),
-      Message.findByChatId(chatId, 50),
-      ChatActivity.find({ chatId }).sort({ createdAt: -1 }).limit(20),
-      ChatParticipant.findOne({ chatId, userId: session.user.id, isActive: true })
-    ]);
+    const { searchParams } = new URL(request.url);
+    const includeDetails = searchParams.get('includeDetails') === 'true';
 
-    // Get unread count for current user
-    const unreadMessages = await Message.findUnreadMessages(session.user.id, chatId);
-    const unreadCount = unreadMessages.length;
+    if (includeDetails) {
+      // Get additional details
+      const [pinnedMessages, recentMessages, unreadMessages, sharedMedia] = await Promise.all([
+        Message.findPinnedMessages(params.id),
+        Message.findByChat(params.id, 20),
+        Message.findUnreadMessages(params.id, session.user.id),
+        Message.find({
+          chatId: params.id,
+          messageType: { $in: ['image', 'video', 'audio'] },
+          isDeleted: false
+        }).limit(50).sort({ createdAt: -1 })
+      ]);
 
-    // Get mentions count
-    const mentionsCount = unreadMessages.filter(msg => 
-      msg.mentions.includes(session.user.id)
-    ).length;
+      const sharedDocuments = await Message.find({
+        chatId: params.id,
+        messageType: 'document',
+        isDeleted: false
+      }).limit(50).sort({ createdAt: -1 });
 
-    // Convert participants
-    const convertedParticipants = participants.map(p => ({
-      id: (p._id as any).toString(),
-      chatId: p.chatId.toString(),
-      userId: p.userId.toString(),
-      userName: p.userName,
-      userEmail: p.userEmail,
-      userAvatar: p.userAvatar,
-      role: p.role as ParticipantRole,
-      joinedAt: p.joinedAt,
-      leftAt: p.leftAt,
-      isActive: p.isActive,
-      isMuted: p.isMuted,
-      lastReadMessageId: p.lastReadMessageId?.toString(),
-      lastReadAt: p.lastReadAt,
-      permissions: p.permissions as ChatPermission[]
-    }));
+      const chatWithDetails: IChatWithDetails = {
+        ...convertToIChat(chat),
+        participantDetails: chat.participants.filter((p: any) => p.isActive).map((p: any) => ({
+          id: p.id,
+          userId: p.userId.toString(),
+          userName: p.userName,
+          userEmail: p.userEmail,
+          userMobile: p.userMobile,
+          displayName: p.displayName,
+          profileImage: p.profileImage,
+          role: p.role,
+          permissions: p.permissions,
+          joinedAt: p.joinedAt,
+          leftAt: p.leftAt,
+          isActive: p.isActive,
+          isMuted: p.isMuted,
+          mutedUntil: p.mutedUntil,
+          lastSeenAt: p.lastSeenAt,
+          isOnline: p.isOnline,
+          lastReadMessageId: p.lastReadMessageId,
+          unreadCount: p.unreadCount
+        })),
+        pinnedMessages: pinnedMessages.map((msg: any) => ({
+          id: msg._id.toString(),
+          chatId: msg.chatId.toString(),
+          senderId: msg.senderId.toString(),
+          senderName: msg.senderName,
+          senderEmail: msg.senderEmail,
+          senderProfileImage: msg.senderProfileImage,
+          content: msg.content,
+          messageType: msg.messageType,
+          attachments: msg.attachments?.map((att: any) => ({
+            id: att.id,
+            messageId: msg._id.toString(),
+            file: att.file,
+            fileName: att.fileName,
+            fileSize: att.fileSize,
+            mimeType: att.mimeType,
+            thumbnailUrl: att.thumbnailUrl,
+            previewUrl: att.previewUrl,
+            downloadCount: att.downloadCount,
+            uploadedBy: att.uploadedBy,
+            uploadedByName: att.uploadedByName,
+            createdAt: att.createdAt
+          })),
+          replyTo: msg.replyTo,
+          forwardedFrom: msg.forwardedFrom,
+          reactions: msg.reactions?.map((r: any) => ({
+            id: r.id,
+            messageId: msg._id.toString(),
+            userId: r.userId.toString(),
+            userName: r.userName,
+            emoji: r.emoji,
+            createdAt: r.createdAt
+          })),
+          mentions: msg.mentions?.map((m: any) => ({
+            id: m.id,
+            messageId: msg._id.toString(),
+            mentionedUserId: m.mentionedUserId.toString(),
+            mentionedUserName: m.mentionedUserName,
+            mentionedUserEmail: m.mentionedUserEmail,
+            mentionType: m.mentionType,
+            startIndex: m.startIndex,
+            endIndex: m.endIndex,
+            isRead: m.isRead,
+            readAt: m.readAt
+          })),
+          isPinned: msg.isPinned,
+          pinnedBy: msg.pinnedBy,
+          pinnedAt: msg.pinnedAt,
+          pinnedReason: msg.pinnedReason,
+          isEdited: msg.isEdited,
+          editedAt: msg.editedAt,
+          editHistory: msg.editHistory,
+          isDeleted: msg.isDeleted,
+          deletedAt: msg.deletedAt,
+          deletedBy: msg.deletedBy,
+          deletedFor: msg.deletedFor,
+          deliveryStatus: msg.deliveryStatus,
+          readBy: msg.readBy?.map((r: any) => ({
+            messageId: msg._id.toString(),
+            userId: r.userId.toString(),
+            userName: r.userName,
+            readAt: r.readAt
+          })),
+          threadId: msg.threadId,
+          threadRepliesCount: msg.threadRepliesCount,
+          lastThreadReply: msg.lastThreadReply,
+          metadata: msg.metadata,
+          createdAt: msg.createdAt,
+          updatedAt: msg.updatedAt
+        })),
+        recentMessages: recentMessages.map((msg: any) => ({
+          id: msg._id.toString(),
+          chatId: msg.chatId.toString(),
+          senderId: msg.senderId.toString(),
+          senderName: msg.senderName,
+          senderEmail: msg.senderEmail,
+          senderProfileImage: msg.senderProfileImage,
+          content: msg.content,
+          messageType: msg.messageType,
+          attachments: msg.attachments?.map((att: any) => ({
+            id: att.id,
+            messageId: msg._id.toString(),
+            file: att.file,
+            fileName: att.fileName,
+            fileSize: att.fileSize,
+            mimeType: att.mimeType,
+            thumbnailUrl: att.thumbnailUrl,
+            previewUrl: att.previewUrl,
+            downloadCount: att.downloadCount,
+            uploadedBy: att.uploadedBy,
+            uploadedByName: att.uploadedByName,
+            createdAt: att.createdAt
+          })),
+          replyTo: msg.replyTo,
+          forwardedFrom: msg.forwardedFrom,
+          reactions: msg.reactions?.map((r: any) => ({
+            id: r.id,
+            messageId: msg._id.toString(),
+            userId: r.userId.toString(),
+            userName: r.userName,
+            emoji: r.emoji,
+            createdAt: r.createdAt
+          })),
+          mentions: msg.mentions?.map((m: any) => ({
+            id: m.id,
+            messageId: msg._id.toString(),
+            mentionedUserId: m.mentionedUserId.toString(),
+            mentionedUserName: m.mentionedUserName,
+            mentionedUserEmail: m.mentionedUserEmail,
+            mentionType: m.mentionType,
+            startIndex: m.startIndex,
+            endIndex: m.endIndex,
+            isRead: m.isRead,
+            readAt: m.readAt
+          })),
+          isPinned: msg.isPinned,
+          pinnedBy: msg.pinnedBy,
+          pinnedAt: msg.pinnedAt,
+          pinnedReason: msg.pinnedReason,
+          isEdited: msg.isEdited,
+          editedAt: msg.editedAt,
+          editHistory: msg.editHistory,
+          isDeleted: msg.isDeleted,
+          deletedAt: msg.deletedAt,
+          deletedBy: msg.deletedBy,
+          deletedFor: msg.deletedFor,
+          deliveryStatus: msg.deliveryStatus,
+          readBy: msg.readBy?.map((r: any) => ({
+            messageId: msg._id.toString(),
+            userId: r.userId.toString(),
+            userName: r.userName,
+            readAt: r.readAt
+          })),
+          threadId: msg.threadId,
+          threadRepliesCount: msg.threadRepliesCount,
+          lastThreadReply: msg.lastThreadReply,
+          metadata: msg.metadata,
+          createdAt: msg.createdAt,
+          updatedAt: msg.updatedAt
+        })),
+        unreadMessages: unreadMessages.map((msg: any) => ({
+          id: msg._id.toString(),
+          chatId: msg.chatId.toString(),
+          senderId: msg.senderId.toString(),
+          senderName: msg.senderName,
+          senderEmail: msg.senderEmail,
+          senderProfileImage: msg.senderProfileImage,
+          content: msg.content,
+          messageType: msg.messageType,
+          attachments: msg.attachments?.map((att: any) => ({
+            id: att.id,
+            messageId: msg._id.toString(),
+            file: att.file,
+            fileName: att.fileName,
+            fileSize: att.fileSize,
+            mimeType: att.mimeType,
+            thumbnailUrl: att.thumbnailUrl,
+            previewUrl: att.previewUrl,
+            downloadCount: att.downloadCount,
+            uploadedBy: att.uploadedBy,
+            uploadedByName: att.uploadedByName,
+            createdAt: att.createdAt
+          })),
+          replyTo: msg.replyTo,
+          forwardedFrom: msg.forwardedFrom,
+          reactions: msg.reactions?.map((r: any) => ({
+            id: r.id,
+            messageId: msg._id.toString(),
+            userId: r.userId.toString(),
+            userName: r.userName,
+            emoji: r.emoji,
+            createdAt: r.createdAt
+          })),
+          mentions: msg.mentions?.map((m: any) => ({
+            id: m.id,
+            messageId: msg._id.toString(),
+            mentionedUserId: m.mentionedUserId.toString(),
+            mentionedUserName: m.mentionedUserName,
+            mentionedUserEmail: m.mentionedUserEmail,
+            mentionType: m.mentionType,
+            startIndex: m.startIndex,
+            endIndex: m.endIndex,
+            isRead: m.isRead,
+            readAt: m.readAt
+          })),
+          isPinned: msg.isPinned,
+          pinnedBy: msg.pinnedBy,
+          pinnedAt: msg.pinnedAt,
+          pinnedReason: msg.pinnedReason,
+          isEdited: msg.isEdited,
+          editedAt: msg.editedAt,
+          editHistory: msg.editHistory,
+          isDeleted: msg.isDeleted,
+          deletedAt: msg.deletedAt,
+          deletedBy: msg.deletedBy,
+          deletedFor: msg.deletedFor,
+          deliveryStatus: msg.deliveryStatus,
+          readBy: msg.readBy?.map((r: any) => ({
+            messageId: msg._id.toString(),
+            userId: r.userId.toString(),
+            userName: r.userName,
+            readAt: r.readAt
+          })),
+          threadId: msg.threadId,
+          threadRepliesCount: msg.threadRepliesCount,
+          lastThreadReply: msg.lastThreadReply,
+          metadata: msg.metadata,
+          createdAt: msg.createdAt,
+          updatedAt: msg.updatedAt
+        })),
+        sharedMedia: sharedMedia.map((msg: any) => msg.attachments || []).flat(),
+        sharedDocuments: sharedDocuments.map((msg: any) => msg.attachments || []).flat()
+      };
 
-    // Convert messages
-    const convertedMessages = recentMessages.map(msg => ({
-      id: (msg._id as any).toString(),
-      chatId: msg.chatId.toString(),
-      senderId: msg.senderId.toString(),
-      senderName: msg.senderName,
-      senderEmail: msg.senderEmail,
-      senderAvatar: msg.senderAvatar,
-      content: msg.content,
-      messageType: msg.messageType as any,
-      replyToMessageId: msg.replyToMessageId?.toString(),
-      mentions: msg.mentions,
-      attachments: [], // Will be populated if needed
-      reactions: msg.reactions.map(r => ({
-        id: r.id,
-        messageId: (msg._id as any).toString(),
-        userId: r.userId,
-        userName: r.userName,
-        emoji: r.emoji,
-        createdAt: r.createdAt
-      })),
-      isEdited: msg.isEdited,
-      editedAt: msg.editedAt,
-      isDeleted: msg.isDeleted,
-      deletedAt: msg.deletedAt,
-      deliveredTo: msg.deliveredTo.map(d => ({
-        userId: d.userId,
-        deliveredAt: d.deliveredAt
-      })),
-      readBy: msg.readBy.map(r => ({
-        userId: r.userId,
-        readAt: r.readAt
-      })),
-      isPinned: msg.isPinned,
-      pinnedBy: msg.pinnedBy?.toString(),
-      pinnedAt: msg.pinnedAt,
-      metadata: msg.metadata,
-      createdAt: msg.createdAt,
-      updatedAt: msg.updatedAt
-    }));
+      return NextResponse.json<IChatApiResponse<IChatWithDetails>>({
+        success: true,
+        message: 'Chat details retrieved successfully',
+        data: chatWithDetails
+      });
+    }
 
-    // Convert activity
-    const convertedActivity = recentActivity.map(activity => ({
-      id: activity._id.toString(),
-      chatId: activity.chatId.toString(),
-      activityType: activity.activityType as any,
-      performedBy: activity.performedBy.toString(),
-      performedByName: activity.performedByName,
-      targetUserId: activity.targetUserId,
-      targetUserName: activity.targetUserName,
-      description: activity.description,
-      metadata: activity.metadata,
-      createdAt: activity.createdAt
-    }));
+    // Mark chat as read
+    await Message.markChatAsRead(params.id, session.user.id);
 
-    // Get online participants (this would typically come from a real-time system)
-    const onlineParticipants = convertedParticipants.filter(p => 
-      // For now, assume all are online. In real implementation, 
-      // this would check against a Redis store or WebSocket connections
-      true
-    );
-
-    const chatWithDetails: IChatWithDetails = {
-      ...convertToIChat(chat),
-      unreadCount,
-      mentionsCount,
-      recentMessages: convertedMessages,
-      onlineParticipants: onlineParticipants,
-      currentUserRole: currentUserParticipant?.role as ParticipantRole || 'member',
-      currentUserPermissions: currentUserParticipant?.permissions as ChatPermission[] || []
-    };
-
-    return NextResponse.json<IChatApiResponse<IChatWithDetails>>({
+    return NextResponse.json<IChatApiResponse<IChat>>({
       success: true,
       message: 'Chat retrieved successfully',
-      data: chatWithDetails
+      data: convertToIChat(chat)
     });
 
   } catch (error) {
@@ -260,18 +403,8 @@ export async function PUT(
     await connectToDatabase();
 
     const params = await context.params;
-    const chatId = params.id;
 
-    // Check if user can manage chat
-    const canManage = await hasPermission(chatId, session.user.id, 'manage-chat');
-    if (!canManage) {
-      return NextResponse.json<IChatApiResponse>({
-        success: false,
-        message: 'Insufficient permissions to update this chat'
-      }, { status: 403 });
-    }
-
-    const chat = await Chat.findById(chatId) as IChatDocument | null;
+    const chat = await Chat.findById(params.id);
     if (!chat) {
       return NextResponse.json<IChatApiResponse>({
         success: false,
@@ -279,27 +412,49 @@ export async function PUT(
       }, { status: 404 });
     }
 
+    // Check if user can edit chat info
+    if (!chat.canUserPerformAction(session.user.id, 'edit-chat-info')) {
+      return NextResponse.json<IChatApiResponse>({
+        success: false,
+        message: 'Insufficient permissions to edit this chat'
+      }, { status: 403 });
+    }
+
     const body: IChatUpdateRequest = await request.json();
-    const { name, description, settings, removeAvatar } = body;
+    const {
+      name,
+      description,
+      cloudinaryAvatar,
+      settings,
+      filesToDelete
+    } = body;
 
     // Build update object
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    if (settings !== undefined) {
-      updateData.settings = { ...chat.settings, ...settings };
+    if (settings !== undefined) updateData.settings = { ...chat.settings, ...settings };
+
+    // Handle avatar
+    if (cloudinaryAvatar) {
+      updateData.avatar = cloudinaryAvatar;
     }
 
-    // Handle avatar removal
-    if (removeAvatar) {
-      updateData.$unset = { avatar: 1 };
+    // Handle file deletion
+    if (filesToDelete && filesToDelete.length > 0) {
+      if (chat.avatar && filesToDelete.includes(chat.avatar.public_id)) {
+        updateData.avatar = undefined;
+      }
+      if (chat.coverImage && filesToDelete.includes(chat.coverImage.public_id)) {
+        updateData.coverImage = undefined;
+      }
     }
 
     const updatedChat = await Chat.findByIdAndUpdate(
-      chatId,
+      params.id,
       updateData,
       { new: true }
-    ) as IChatDocument | null;
+    );
 
     if (!updatedChat) {
       return NextResponse.json<IChatApiResponse>({
@@ -309,17 +464,15 @@ export async function PUT(
     }
 
     // Create activity log
-    await ChatActivity.create({
-      chatId,
-      activityType: 'chat-updated',
-      performedBy: session.user.id,
+    const changedFields = Object.keys(updateData);
+    await ChatActivity.createActivity({
+      chatId: new mongoose.Types.ObjectId(params.id),
+      activityType: 'chat-settings-changed',
+      performedBy: new mongoose.Types.ObjectId(session.user.id),
       performedByName: session.user.name,
-      description: `Chat "${updatedChat.name}" was updated`,
-      metadata: { updatedFields: Object.keys(updateData) }
+      description: `Chat settings were updated`,
+      metadata: { changedFields }
     });
-
-    // Update last activity
-    await updatedChat.updateLastActivity();
 
     return NextResponse.json<IChatApiResponse<IChat>>({
       success: true,
@@ -337,7 +490,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Archive chat (soft delete)
+// DELETE - Leave/Delete chat
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -354,9 +507,8 @@ export async function DELETE(
     await connectToDatabase();
 
     const params = await context.params;
-    const chatId = params.id;
 
-    const chat = await Chat.findById(chatId) as IChatDocument | null;
+    const chat = await Chat.findById(params.id);
     if (!chat) {
       return NextResponse.json<IChatApiResponse>({
         success: false,
@@ -364,47 +516,67 @@ export async function DELETE(
       }, { status: 404 });
     }
 
-    // Only creator or admin can archive chat
-    if (chat.createdBy.toString() !== session.user.id && !chat.isAdmin(session.user.id)) {
+    // Check access
+    if (!chat.isParticipant(session.user.id)) {
       return NextResponse.json<IChatApiResponse>({
         success: false,
-        message: 'Insufficient permissions to archive this chat'
+        message: 'You are not a participant in this chat'
       }, { status: 403 });
     }
 
-    // Archive the chat
-    const archivedChat = await Chat.findByIdAndUpdate(
-      chatId,
-      { isArchived: true },
-      { new: true }
-    ) as IChatDocument | null;
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action') || 'leave'; // 'leave' or 'delete'
 
-    if (!archivedChat) {
+    if (action === 'delete') {
+      // Only chat owner/creator can delete
+      if (chat.createdBy.toString() !== session.user.id) {
+        return NextResponse.json<IChatApiResponse>({
+          success: false,
+          message: 'Only the chat creator can delete this chat'
+        }, { status: 403 });
+      }
+
+      // Soft delete - mark as archived instead of hard delete
+      await Chat.findByIdAndUpdate(params.id, { isArchived: true });
+
+      // Create activity log
+      await ChatActivity.createActivity({
+        chatId: new mongoose.Types.ObjectId(params.id),
+        activityType: 'chat-archived',
+        performedBy: new mongoose.Types.ObjectId(session.user.id),
+        performedByName: session.user.name,
+        description: `Chat was deleted by ${session.user.name}`
+      });
+
       return NextResponse.json<IChatApiResponse>({
-        success: false,
-        message: 'Failed to archive chat'
-      }, { status: 500 });
+        success: true,
+        message: 'Chat deleted successfully'
+      });
+    } else {
+      // Leave chat - remove user as participant
+      chat.removeParticipant(session.user.id);
+      await chat.save();
+
+      // Create activity log
+      await ChatActivity.createActivity({
+        chatId: new mongoose.Types.ObjectId(params.id),
+        activityType: 'participant-left',
+        performedBy: new mongoose.Types.ObjectId(session.user.id),
+        performedByName: session.user.name,
+        description: `${session.user.name} left the chat`
+      });
+
+      return NextResponse.json<IChatApiResponse>({
+        success: true,
+        message: 'Left chat successfully'
+      });
     }
 
-    // Create activity log
-    await ChatActivity.create({
-      chatId,
-      activityType: 'chat-archived',
-      performedBy: session.user.id,
-      performedByName: session.user.name,
-      description: `Chat "${chat.name}" was archived`
-    });
-
-    return NextResponse.json<IChatApiResponse>({
-      success: true,
-      message: 'Chat archived successfully'
-    });
-
   } catch (error) {
-    console.error('Archive chat error:', error);
+    console.error('Delete/Leave chat error:', error);
     return NextResponse.json<IChatApiResponse>({
       success: false,
-      message: 'Failed to archive chat',
+      message: 'Failed to process request',
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }

@@ -1,77 +1,66 @@
 // app/api/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
-import { Chat, ChatParticipant, Message, IChatDocument, IChatParticipantDocument } from '@/models/Chat';
+import Chat from '@/models/chat/Chat';
 import User from '@/models/User';
+import UserChatPreferences from '@/models/chat/UserChatPreferences';
+import ChatActivity from '@/models/chat/ChatActivity';
 import { 
-  IChatCreateRequest, 
+  IChatCreateRequest,
   IChatApiResponse, 
   IChat,
-  IChatWithDetails,
-  IChatSearch,
-  IChatFilter,
-  ChatType,
-  ParticipantRole
+  IChatListResponse,
+  ChatFilter
 } from '@/types/chat';
 import { authOptions } from '@/lib/auth';
 
 // Helper function to convert Mongoose document to IChat
-function convertToIChat(doc: IChatDocument): IChat {
+function convertToIChat(doc: any): IChat {
   return {
-    id: (doc._id as string | { toString(): string }).toString(),
+    id: doc._id.toString(),
     name: doc.name,
-    type: doc.type as ChatType,
     description: doc.description,
-    avatar: doc.avatar,
+    chatType: doc.chatType,
     createdBy: doc.createdBy.toString(),
     createdByName: doc.createdByName,
     createdByEmail: doc.createdByEmail,
-    participants: doc.participants.map(p => p.toString()),
-    admins: doc.admins.map(a => a.toString()),
-    lastMessage: undefined, // Will be populated separately if needed
+    participants: doc.participants.map((p: any) => ({
+      id: p.id,
+      userId: p.userId.toString(),
+      userName: p.userName,
+      userEmail: p.userEmail,
+      userMobile: p.userMobile,
+      displayName: p.displayName,
+      profileImage: p.profileImage,
+      role: p.role,
+      permissions: p.permissions,
+      joinedAt: p.joinedAt,
+      leftAt: p.leftAt,
+      isActive: p.isActive,
+      isMuted: p.isMuted,
+      mutedUntil: p.mutedUntil,
+      lastSeenAt: p.lastSeenAt,
+      isOnline: p.isOnline,
+      lastReadMessageId: p.lastReadMessageId,
+      unreadCount: p.unreadCount
+    })),
+    lastMessage: doc.lastMessage,
     lastActivity: doc.lastActivity,
     isArchived: doc.isArchived,
     isPinned: doc.isPinned,
-    settings: {
-      allowFileUploads: doc.settings.allowFileUploads,
-      allowPolls: doc.settings.allowPolls,
-      allowAnnouncements: doc.settings.allowAnnouncements,
-      maxFileSize: doc.settings.maxFileSize,
-      allowedFileTypes: doc.settings.allowedFileTypes as any,
-      messageRetention: doc.settings.messageRetention,
-      requireApprovalForNewMembers: doc.settings.requireApprovalForNewMembers,
-      allowMembersToAddOthers: doc.settings.allowMembersToAddOthers,
-      allowMembersToCreatePolls: doc.settings.allowMembersToCreatePolls,
-      muteNotifications: doc.settings.muteNotifications
-    },
+    pinnedBy: doc.pinnedBy,
+    pinnedAt: doc.pinnedAt,
+    settings: doc.settings,
+    totalMessages: doc.totalMessages,
+    unreadCount: doc.unreadCount,
+    avatar: doc.avatar,
+    coverImage: doc.coverImage,
+    tags: doc.tags,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt
   };
-}
-
-// Helper function to get default permissions based on role
-function getDefaultPermissions(role: ParticipantRole): string[] {
-  switch (role) {
-    case 'owner':
-    case 'admin':
-      return [
-        'send-messages', 'send-files', 'create-polls', 'pin-messages',
-        'delete-messages', 'edit-messages', 'mention-all', 'add-members',
-        'remove-members', 'manage-chat', 'create-announcements'
-      ];
-    case 'moderator':
-      return [
-        'send-messages', 'send-files', 'create-polls', 'pin-messages',
-        'delete-messages', 'edit-messages', 'mention-all', 'create-announcements'
-      ];
-    case 'member':
-      return ['send-messages', 'send-files'];
-    case 'guest':
-      return ['send-messages'];
-    default:
-      return ['send-messages'];
-  }
 }
 
 // GET - List chats with filters and pagination
@@ -90,134 +79,64 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     // Parse query parameters
-    const query = searchParams.get('query') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
-    const sortBy = searchParams.get('sortBy') || 'lastActivity';
-    const sortOrder = searchParams.get('sortOrder') || 'desc';
-    
-    // Parse filters
-    const type = searchParams.get('type')?.split(',') as ChatType[] || [];
-    const isArchived = searchParams.get('isArchived');
+    const chatType = searchParams.get('chatType');
+    const hasUnread = searchParams.get('hasUnread');
     const isPinned = searchParams.get('isPinned');
-    const hasUnreadMessages = searchParams.get('hasUnreadMessages');
-    const createdBy = searchParams.get('createdBy');
+    const isArchived = searchParams.get('isArchived');
+    const query = searchParams.get('query') || '';
 
-    // Build filter object - user can only see chats they participate in
-    const userParticipants = await ChatParticipant.find({
-      userId: session.user.id,
-      isActive: true
-    }).select('chatId');
+    // Build filter object
+    const filters: ChatFilter = {};
+    if (chatType) filters.chatType = [chatType as any];
+    if (hasUnread !== null) filters.hasUnread = hasUnread === 'true';
+    if (isPinned !== null) filters.isPinned = isPinned === 'true';
+    if (isArchived !== null) filters.isArchived = isArchived === 'true';
 
-    const chatIds = userParticipants.map(p => p.chatId);
-    
-    const filter: any = {
-      _id: { $in: chatIds }
-    };
+    let chats;
+    let total;
 
-    if (type.length > 0) filter.type = { $in: type };
-    if (isArchived !== null) filter.isArchived = isArchived === 'true';
-    if (isPinned !== null) filter.isPinned = isPinned === 'true';
-    if (createdBy) filter.createdBy = createdBy;
-
-    // Add text search if query provided
     if (query) {
-      filter.$or = [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } }
-      ];
+      // Search chats
+      chats = await Chat.searchChats(query, session.user.id);
+      total = chats.length;
+      
+      // Apply pagination to search results
+      const skip = (page - 1) * limit;
+      chats = chats.slice(skip, skip + limit);
+    } else {
+      // Get user chats with filters
+      const mongoFilters = {
+        ...filters,
+        limit,
+        page
+      };
+      
+      chats = await Chat.findUserChats(session.user.id, mongoFilters);
+      total = await Chat.countDocuments({
+        'participants.userId': session.user.id,
+        'participants.isActive': true,
+        ...(filters.chatType && { chatType: { $in: filters.chatType } }),
+        ...(filters.isPinned !== undefined && { isPinned: filters.isPinned }),
+        ...(filters.isArchived !== undefined && { isArchived: filters.isArchived })
+      });
     }
 
-    // Build sort object
-    const sort: any = {};
-    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    // Get user's unread count
+    const unreadCount = await Chat.getUnreadCount(session.user.id);
 
-    // Execute query with pagination
-    const skip = (page - 1) * limit;
-    const [chats, total] = await Promise.all([
-      Chat.find(filter)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .lean() as Promise<IChatDocument[]>,
-      Chat.countDocuments(filter)
-    ]);
+    const response: IChatListResponse = {
+      chats: chats.map(convertToIChat),
+      totalCount: total,
+      unreadCount,
+      hasMore: page * limit < total
+    };
 
-    // Convert to IChat and get additional details if needed
-    const convertedChats = await Promise.all(
-      chats.map(async (chat) => {
-        const basicChat = convertToIChat(chat);
-        
-        // Get last message if exists
-        if (chat.lastMessageId) {
-          const lastMessage = await Message.findById(chat.lastMessageId).lean();
-          if (lastMessage) {
-            basicChat.lastMessage = {
-              id: lastMessage._id.toString(),
-              chatId: lastMessage.chatId.toString(),
-              senderId: lastMessage.senderId.toString(),
-              senderName: lastMessage.senderName,
-              senderEmail: lastMessage.senderEmail,
-              senderAvatar: lastMessage.senderAvatar,
-              content: lastMessage.content,
-              messageType: lastMessage.messageType as any,
-              replyToMessageId: lastMessage.replyToMessageId?.toString(),
-              mentions: lastMessage.mentions,
-              attachments: [], // Will be populated separately if needed
-              reactions: lastMessage.reactions.map(r => ({
-                id: r.id,
-                messageId: lastMessage._id.toString(),
-                userId: r.userId,
-                userName: r.userName,
-                emoji: r.emoji,
-                createdAt: r.createdAt
-              })),
-              isEdited: lastMessage.isEdited,
-              editedAt: lastMessage.editedAt,
-              isDeleted: lastMessage.isDeleted,
-              deletedAt: lastMessage.deletedAt,
-              deliveredTo: lastMessage.deliveredTo.map(d => ({
-                userId: d.userId,
-                deliveredAt: d.deliveredAt
-              })),
-              readBy: lastMessage.readBy.map(r => ({
-                userId: r.userId,
-                readAt: r.readAt
-              })),
-              isPinned: lastMessage.isPinned,
-              pinnedBy: lastMessage.pinnedBy?.toString(),
-              pinnedAt: lastMessage.pinnedAt,
-              metadata: lastMessage.metadata,
-              createdAt: lastMessage.createdAt,
-              updatedAt: lastMessage.updatedAt
-            };
-          }
-        }
-
-        return basicChat;
-      })
-    );
-
-    return NextResponse.json<IChatApiResponse<{
-      chats: IChat[];
-      pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-      }
-    }>>({
+    return NextResponse.json<IChatApiResponse<IChatListResponse>>({
       success: true,
       message: 'Chats retrieved successfully',
-      data: {
-        chats: convertedChats,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit)
-        }
-      }
+      data: response
     });
 
   } catch (error) {
@@ -246,134 +165,140 @@ export async function POST(request: NextRequest) {
     const body: IChatCreateRequest = await request.json();
     const {
       name,
-      type,
       description,
-      participants = [],
-      admins = [],
-      isPrivate = false,
-      settings
+      chatType,
+      participantIds,
+      cloudinaryAvatar,
+      settings,
+      isPrivate = false
     } = body;
 
     // Validate required fields
-    if (!name || !type) {
+    if (!chatType || !participantIds || participantIds.length === 0) {
       return NextResponse.json<IChatApiResponse>({
         success: false,
-        message: 'Name and type are required'
+        message: 'Chat type and participants are required'
       }, { status: 400 });
     }
 
-    // Validate participants exist
-    if (participants.length > 0) {
-      const users = await User.find({ _id: { $in: participants } });
-      if (users.length !== participants.length) {
-        return NextResponse.json<IChatApiResponse>({
-          success: false,
-          message: 'Some participants not found'
-        }, { status: 400 });
+    // Validate chat type specific requirements
+    if (chatType === 'direct' && participantIds.length !== 1) {
+      return NextResponse.json<IChatApiResponse>({
+        success: false,
+        message: 'Direct messages must have exactly one other participant'
+      }, { status: 400 });
+    }
+
+    if ((chatType === 'group' || chatType === 'channel') && !name) {
+      return NextResponse.json<IChatApiResponse>({
+        success: false,
+        message: 'Group chats and channels must have a name'
+      }, { status: 400 });
+    }
+
+    // For direct messages, check if chat already exists
+    if (chatType === 'direct') {
+      const existingChat = await Chat.findDirectChat(session.user.id, participantIds[0]);
+      if (existingChat) {
+        return NextResponse.json<IChatApiResponse<IChat>>({
+          success: true,
+          message: 'Direct chat already exists',
+          data: convertToIChat(existingChat)
+        });
       }
     }
 
-    // For direct chats, ensure exactly 2 participants
-    if (type === 'direct') {
-      if (participants.length !== 1) {
-        return NextResponse.json<IChatApiResponse>({
-          success: false,
-          message: 'Direct chats must have exactly one other participant'
-        }, { status: 400 });
-      }
-
-      // Check if direct chat already exists
-      const existingDirectChat = await Chat.findDirectChat(session.user.id, participants[0]);
-      if (existingDirectChat) {
-        return NextResponse.json<IChatApiResponse>({
-          success: false,
-          message: 'Direct chat with this user already exists'
-        }, { status: 400 });
-      }
+    // Get participant details
+    const allParticipantIds = [session.user.id, ...participantIds];
+    const users = await User.find({ _id: { $in: allParticipantIds } }).lean();
+    
+    if (users.length !== allParticipantIds.length) {
+      return NextResponse.json<IChatApiResponse>({
+        success: false,
+        message: 'One or more participants not found'
+      }, { status: 400 });
     }
 
-    // Default settings
-    const defaultSettings = {
-      allowFileUploads: true,
-      allowPolls: true,
-      allowAnnouncements: type === 'channel' || type === 'announcement',
-      maxFileSize: 50,
-      allowedFileTypes: ['image', 'video', 'audio', 'document', 'spreadsheet', 'presentation', 'archive', 'other'],
-      messageRetention: 0,
-      requireApprovalForNewMembers: isPrivate,
-      allowMembersToAddOthers: type !== 'direct' && !isPrivate,
-      allowMembersToCreatePolls: type !== 'direct',
-      muteNotifications: false,
-      ...settings
-    };
+    // Build participants array
+    const participants = users.map(user => {
+      const isCreator = user._id.toString() === session.user.id;
+      return {
+        id: user._id.toString(),
+        userId: user._id,
+        userName: user.name,
+        userEmail: user.email,
+        userMobile: user.mobile,
+        displayName: user.name,
+        role: isCreator ? 'owner' : 'member',
+        permissions: [],
+        joinedAt: new Date(),
+        isActive: true,
+        isMuted: false,
+        isOnline: false,
+        unreadCount: 0
+      };
+    });
 
-    // Create chat
     const chatData = {
-      name,
-      type,
+      name: chatType === 'direct' ? undefined : name,
       description,
+      chatType,
       createdBy: session.user.id,
       createdByName: session.user.name,
       createdByEmail: session.user.email,
-      participants: [], // Will be populated after creating participants
-      admins: [...admins, session.user.id], // Creator is always admin
-      settings: defaultSettings
+      participants,
+      settings: {
+        allowFileSharing: true,
+        allowReactions: true,
+        allowMentions: true,
+        allowForwarding: true,
+        allowPinning: true,
+        allowThreads: true,
+        allowEditing: true,
+        allowDeleting: true,
+        maxFileSize: 50,
+        allowedFileTypes: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt'],
+        muteNotifications: false,
+        theme: 'auto',
+        language: 'en',
+        timezone: 'UTC',
+        ...settings
+      },
+      avatar: cloudinaryAvatar,
+      tags: []
     };
 
-    const chat = await Chat.create(chatData) as IChatDocument;
+    const chat = await Chat.create(chatData);
 
-    // Create chat participants
-    const participantPromises = [];
+    // Create chat activity
+    await ChatActivity.createActivity({
+      chatId: chat._id as mongoose.Types.ObjectId,
+      activityType: 'chat-created',
+      performedBy: new mongoose.Types.ObjectId(session.user.id),
+      performedByName: session.user.name,
+      description: `${chatType === 'direct' ? 'Direct message' : `${chatType} "${name}"`} was created`,
+      metadata: { chatType, participantCount: participants.length }
+    });
 
-    // Add creator as owner
-    participantPromises.push(
-      ChatParticipant.create({
-        chatId: chat._id,
-        userId: session.user.id,
-        userName: session.user.name,
-        userEmail: session.user.email,
-        role: 'owner',
-        permissions: getDefaultPermissions('owner')
-      })
-    );
-
-    // Add other participants
-    if (participants.length > 0) {
-      const users = await User.find({ _id: { $in: participants } });
-      
-      for (const user of users) {
-        const role: ParticipantRole = admins.includes(user._id.toString()) ? 'admin' : 'member';
-        participantPromises.push(
-          ChatParticipant.create({
-            chatId: chat._id,
-            userId: user._id,
-            userName: user.name,
-            userEmail: user.email,
-            role,
-            permissions: getDefaultPermissions(role)
-          })
-        );
-      }
-    }
-
-    const createdParticipants = await Promise.all(participantPromises) as IChatParticipantDocument[];
-
-    // Update chat with participant IDs
-    chat.participants = createdParticipants.map(p => p._id as any);
-    await chat.save();
-
-    // For direct chats, set name to the other participant's name
-    if (type === 'direct' && createdParticipants.length === 2) {
-      const otherParticipant = createdParticipants.find(p => p.userId.toString() !== session.user.id);
-      if (otherParticipant) {
-        chat.name = otherParticipant.userName;
-        await chat.save();
+    // Add participants to activity log
+    for (const participant of participants) {
+      if (participant.userId.toString() !== session.user.id) {
+        await ChatActivity.createActivity({
+          chatId: chat._id as mongoose.Types.ObjectId,
+          activityType: 'participant-added',
+          performedBy: new mongoose.Types.ObjectId(session.user.id),
+          performedByName: session.user.name,
+          targetUserId: participant.userId as mongoose.Types.ObjectId,
+          targetUserName: participant.userName,
+          description: `${participant.userName} was added to the ${chatType}`,
+          metadata: { role: participant.role }
+        });
       }
     }
 
     return NextResponse.json<IChatApiResponse<IChat>>({
       success: true,
-      message: 'Chat created successfully',
+      message: `${chatType === 'direct' ? 'Direct message' : 'Chat'} created successfully`,
       data: convertToIChat(chat)
     }, { status: 201 });
 

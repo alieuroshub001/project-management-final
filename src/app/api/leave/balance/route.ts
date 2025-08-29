@@ -22,20 +22,38 @@ export async function GET(request: NextRequest) {
     const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
 
     const balanceDoc = await LeaveBalance.getOrCreate(session.user.id, year);
+    
+    // Fixed: Properly map all the fields from the document
     const balance: ILeaveBalance = {
-        id: balanceDoc.id ?? balanceDoc._id?.toString?.() ?? '', // ensure id is present
-        employeeId: balanceDoc.employeeId?.toString?.() ?? '',
-        year: balanceDoc.year,
-        annualLeave: 0,
-        sickLeave: 0,
-        casualLeave: 0,
-        unpaidLeave: 0,
-        usedAnnualLeave: 0,
-        usedSickLeave: 0,
-        usedCasualLeave: 0,
-        usedUnpaidLeave: 0,
-        createdAt: balanceDoc.createdAt ?? new Date(),
-        updatedAt: balanceDoc.updatedAt ?? new Date()
+      id: balanceDoc._id?.toString() || balanceDoc.id?.toString() || '',
+      employeeId: balanceDoc.employeeId?.toString() || '',
+      year: balanceDoc.year,
+      // Map all leave types properly
+      annualLeave: balanceDoc.annualLeave || 0,
+      sickLeave: balanceDoc.sickLeave || 0,
+      casualLeave: balanceDoc.casualLeave || 0,
+      maternityLeave: balanceDoc.maternityLeave || 0,
+      paternityLeave: balanceDoc.paternityLeave || 0,
+      unpaidLeave: balanceDoc.unpaidLeave || 0,
+      compensatoryLeave: balanceDoc.compensatoryLeave || 0,
+      bereavementLeave: balanceDoc.bereavementLeave || 0,
+      sabbaticalLeave: balanceDoc.sabbaticalLeave || 0,
+      halfDayLeave: balanceDoc.halfDayLeave || 0,
+      shortLeave: balanceDoc.shortLeave || 0,
+      // Map all used leave types
+      usedAnnualLeave: balanceDoc.usedAnnualLeave || 0,
+      usedSickLeave: balanceDoc.usedSickLeave || 0,
+      usedCasualLeave: balanceDoc.usedCasualLeave || 0,
+      usedMaternityLeave: balanceDoc.usedMaternityLeave || 0,
+      usedPaternityLeave: balanceDoc.usedPaternityLeave || 0,
+      usedUnpaidLeave: balanceDoc.usedUnpaidLeave || 0,
+      usedCompensatoryLeave: balanceDoc.usedCompensatoryLeave || 0,
+      usedBereavementLeave: balanceDoc.usedBereavementLeave || 0,
+      usedSabbaticalLeave: balanceDoc.usedSabbaticalLeave || 0,
+      usedHalfDayLeave: balanceDoc.usedHalfDayLeave || 0,
+      usedShortLeave: balanceDoc.usedShortLeave || 0,
+      createdAt: balanceDoc.createdAt || new Date(),
+      updatedAt: balanceDoc.updatedAt || new Date()
     };
 
     return NextResponse.json<ILeaveApiResponse<ILeaveBalance>>({

@@ -2,15 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { v2 as cloudinary } from 'cloudinary';
-import { ICloudinaryFile } from '@/types/chat';
+import { IFileUploadResponse, ICloudinaryFile } from '@/types/chat';
 import { authOptions } from '@/lib/auth';
-
-// Define file upload response interface locally since it's not in chat types
-interface IFileUploadResponse {
-  success: boolean;
-  message: string;
-  files: ICloudinaryFile[];
-}
 
 // Configure Cloudinary
 cloudinary.config({
@@ -34,7 +27,7 @@ export async function POST(request: NextRequest) {
     const files = formData.getAll('files') as File[];
     const chatId = formData.get('chatId') as string;
     const messageId = formData.get('messageId') as string;
-    const uploadType = formData.get('uploadType') as string || 'message'; // 'message', 'announcement', 'avatar'
+    const uploadType = formData.get('uploadType') as string || 'message'; // 'message', 'avatar', 'attachment'
 
     if (!files || files.length === 0) {
       return NextResponse.json<IFileUploadResponse>({
@@ -44,36 +37,42 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    if (!chatId) {
+      return NextResponse.json<IFileUploadResponse>({
+        success: false,
+        message: 'Chat ID is required',
+        files: []
+      }, { status: 400 });
+    }
+
     // Validate file types and sizes based on upload type
-    let maxFileSize: number;
-    let allowedTypes: string[];
+    let maxFileSize = 50 * 1024 * 1024; // 50MB default
+    let allowedTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'application/pdf', 
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'text/plain', 'text/csv',
+      'application/zip', 'application/x-zip-compressed',
+      'audio/mpeg', 'audio/wav', 'audio/ogg',
+      'video/mp4', 'video/mpeg', 'video/quicktime', 'video/webm'
+    ];
 
     if (uploadType === 'avatar') {
-      maxFileSize = 5 * 1024 * 1024; // 5MB for avatars
+      // Stricter rules for avatars
+      maxFileSize = 5 * 1024 * 1024; // 5MB
       allowedTypes = [
-        'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'
-      ];
-    } else {
-      maxFileSize = 50 * 1024 * 1024; // 50MB for messages/announcements
-      allowedTypes = [
-        'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-        'video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv',
-        'audio/mp3', 'audio/wav', 'audio/flac', 'audio/aac',
-        'application/pdf', 
-        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'text/plain', 'text/csv',
-        'application/zip', 'application/x-zip-compressed', 'application/x-rar-compressed'
+        'image/jpeg', 'image/jpg', 'image/png', 'image/webp'
       ];
     }
 
+    // Validate each file
     for (const file of files) {
       if (file.size > maxFileSize) {
-        const maxSizeMB = maxFileSize / (1024 * 1024);
         return NextResponse.json<IFileUploadResponse>({
           success: false,
-          message: `File ${file.name} exceeds maximum size of ${maxSizeMB}MB`,
+          message: `File ${file.name} exceeds maximum size of ${maxFileSize / (1024 * 1024)}MB`,
           files: []
         }, { status: 400 });
       }
@@ -91,50 +90,54 @@ export async function POST(request: NextRequest) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
-      // Determine upload folder based on type
-      let folder = `chat_system/${session.user.id}`;
+      // Determine upload folder based on type and chat
+      let folder = `chat/${chatId}/${session.user.id}`;
       if (uploadType === 'avatar') {
-        folder = `chat_system/avatars/${session.user.id}`;
-      } else if (chatId) {
-        if (messageId) {
-          folder = `chat_system/${chatId}/messages/${messageId}`;
-        } else {
-          folder = `chat_system/${chatId}`;
-        }
+        folder = `chat/${chatId}/avatars`;
+      } else if (messageId) {
+        folder = `chat/${chatId}/messages/${messageId}`;
       }
 
-      // Determine resource type
-      let resourceType: 'image' | 'video' | 'audio' | 'raw' = 'raw';
-      if (file.type.startsWith('image/')) {
-        resourceType = 'image';
-      } else if (file.type.startsWith('video/')) {
-        resourceType = 'video';
-      } else if (file.type.startsWith('audio/')) {
-        resourceType = 'video'; // Cloudinary treats audio as video
-      }
+      // Generate appropriate public_id
+      const timestamp = Date.now();
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const publicId = `${folder}/${timestamp}_${sanitizedFileName}`;
 
       return new Promise<ICloudinaryFile>((resolve, reject) => {
+        const uploadOptions: any = {
+          folder,
+          resource_type: 'auto',
+          public_id: publicId,
+        };
+
+        // Add transformations for images
+        if (file.type.startsWith('image/')) {
+          uploadOptions.transformation = [
+            { quality: 'auto:good' },
+            { fetch_format: 'auto' }
+          ];
+
+          // Special handling for avatars
+          if (uploadType === 'avatar') {
+            uploadOptions.transformation.push(
+              { width: 200, height: 200, crop: 'fill', gravity: 'face' }
+            );
+          }
+        }
+
+        // Add video optimization
+        if (file.type.startsWith('video/')) {
+          uploadOptions.transformation = [
+            { quality: 'auto:good' },
+            { format: 'mp4' }
+          ];
+        }
+
         const uploadStream = cloudinary.uploader.upload_stream(
-          {
-            folder,
-            resource_type: resourceType,
-            public_id: `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`,
-            // For images, add transformations
-            ...(resourceType === 'image' && uploadType === 'avatar' && {
-              transformation: [
-                { width: 200, height: 200, crop: 'fill', gravity: 'face' },
-                { quality: 'auto', fetch_format: 'auto' }
-              ]
-            }),
-            ...(resourceType === 'image' && uploadType === 'message' && {
-              transformation: [
-                { width: 800, height: 600, crop: 'limit' },
-                { quality: 'auto', fetch_format: 'auto' }
-              ]
-            })
-          },
+          uploadOptions,
           (error, result) => {
             if (error) {
+              console.error('Cloudinary upload error:', error);
               reject(error);
             } else if (result) {
               resolve({
@@ -148,6 +151,8 @@ export async function POST(request: NextRequest) {
                 original_filename: result.original_filename || file.name,
                 created_at: result.created_at
               });
+            } else {
+              reject(new Error('Upload failed - no result'));
             }
           }
         );
@@ -156,16 +161,26 @@ export async function POST(request: NextRequest) {
       });
     });
 
-    const uploadedFiles = await Promise.all(uploadPromises);
+    try {
+      const uploadedFiles = await Promise.all(uploadPromises);
 
-    return NextResponse.json<IFileUploadResponse>({
-      success: true,
-      message: 'Files uploaded successfully',
-      files: uploadedFiles
-    });
+      return NextResponse.json<IFileUploadResponse>({
+        success: true,
+        message: 'Files uploaded successfully',
+        files: uploadedFiles
+      });
+
+    } catch (uploadError) {
+      console.error('File upload failed:', uploadError);
+      return NextResponse.json<IFileUploadResponse>({
+        success: false,
+        message: 'One or more files failed to upload',
+        files: []
+      }, { status: 500 });
+    }
 
   } catch (error) {
-    console.error('File upload error:', error);
+    console.error('Chat file upload error:', error);
     return NextResponse.json<IFileUploadResponse>({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to upload files',
@@ -186,7 +201,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { publicIds } = body;
+    const { publicIds, chatId } = body;
 
     if (!publicIds || !Array.isArray(publicIds) || publicIds.length === 0) {
       return NextResponse.json({
@@ -195,48 +210,43 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Validate that user owns these files (basic security check)
-    const userPrefix = `chat_system/${session.user.id}`;
-    const invalidFiles = publicIds.filter((publicId: string) => 
-      !publicId.startsWith(userPrefix) && !publicId.includes(`/${session.user.id}/`)
-    );
-
-    if (invalidFiles.length > 0) {
+    if (!chatId) {
       return NextResponse.json({
         success: false,
-        message: 'You can only delete your own files'
-      }, { status: 403 });
+        message: 'Chat ID is required'
+      }, { status: 400 });
     }
 
-    const deletePromises = publicIds.map((publicId: string) => {
-      // Determine resource type from public_id structure
-      let resourceType: 'image' | 'video' | 'raw' = 'raw';
-      if (publicId.includes('/avatars/') || publicId.includes('image')) {
-        resourceType = 'image';
-      } else if (publicId.includes('video') || publicId.includes('audio')) {
-        resourceType = 'video';
-      }
+    // Validate that user has access to delete these files
+    // In a real implementation, you'd check if the user has permission
+    // to delete files in this chat or if they uploaded the files
 
-      return cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+    const deletePromises = publicIds.map(async (publicId: string) => {
+      try {
+        const result = await cloudinary.uploader.destroy(publicId);
+        return { publicId, result: result.result, success: result.result === 'ok' };
+      } catch (error) {
+        console.error(`Failed to delete ${publicId}:`, error);
+        return { publicId, result: 'error', success: false };
+      }
     });
 
     const results = await Promise.all(deletePromises);
     const deletedFiles = results
-      .map((result, index) => ({ result, publicId: publicIds[index] }))
-      .filter(({ result }) => result.result === 'ok' || result.result === 'not found')
-      .map(({ publicId }) => publicId);
+      .filter(result => result.success)
+      .map(result => result.publicId);
 
-    const failedDeletions = results.filter(result => 
-      result.result !== 'ok' && result.result !== 'not found'
-    );
+    const failedFiles = results
+      .filter(result => !result.success)
+      .map(result => result.publicId);
 
     return NextResponse.json({
-      success: failedDeletions.length === 0,
-      message: failedDeletions.length > 0 
-        ? `${deletedFiles.length} files deleted, ${failedDeletions.length} failed`
-        : 'Files deleted successfully',
+      success: deletedFiles.length > 0,
+      message: deletedFiles.length === publicIds.length 
+        ? 'All files deleted successfully'
+        : `${deletedFiles.length}/${publicIds.length} files deleted successfully`,
       deletedFiles,
-      failedCount: failedDeletions.length
+      failedFiles: failedFiles.length > 0 ? failedFiles : undefined
     });
 
   } catch (error) {

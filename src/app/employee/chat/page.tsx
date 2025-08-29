@@ -7,18 +7,17 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 function ChatPageContent() {
   const searchParams = useSearchParams();
-  const chatId = searchParams.get('chat');
-  const tab = searchParams.get('tab') || 'chats';
+  const tab = searchParams.get('tab') || 'dashboard';
+  const chatId = searchParams.get('chatId');
 
-  // For now, just pass the ChatModule without props until you update it
-  return <ChatModule />;
+  return <ChatModule initialTab={tab as any} selectedChatId={chatId || undefined} />;
 }
 
 export default function ChatPage() {
   return (
-    <div className="h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Suspense fallback={
-        <div className="flex justify-center items-center h-screen">
+        <div className="flex justify-center items-center min-h-screen">
           <LoadingSpinner size="lg" />
         </div>
       }>
