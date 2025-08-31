@@ -825,6 +825,99 @@ export type ChatEventType =
   | 'user-offline'
   | 'announcement-created';
 
+// WhatsApp-like Message Status
+export type MessageStatus = 
+  | 'sending'    // Clock icon
+  | 'sent'       // Single gray check
+  | 'delivered'  // Double gray check
+  | 'read';      // Double blue check
+
+// Enhanced Message Interface for WhatsApp-like features
+export interface IMessageBubble {
+  id: string;
+  content: string;
+  timestamp: Date;
+  status: MessageStatus;
+  isOwn: boolean;
+  senderName?: string;
+  senderAvatar?: string;
+  replyTo?: IMessageBubble;
+  attachments?: IMessageAttachment[];
+  reactions?: IMessageReaction[];
+  isEdited?: boolean;
+  isForwarded?: boolean;
+  messageType: MessageType;
+}
+
+// Chat Connection Status
+export type ConnectionStatus = 
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'reconnecting';
+
+// Real-time typing indicator
+export interface ITypingUser {
+  userId: string;
+  userName: string;
+  timestamp: Date;
+}
+
+// Message grouping for better UX
+export interface IMessageGroup {
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  messages: IMessageBubble[];
+  timestamp: Date;
+  isOwn: boolean;
+}
+
+// Enhanced Chat List Item
+export interface IChatListItem {
+  id: string;
+  name: string;
+  avatar?: string;
+  lastMessage?: {
+    content: string;
+    timestamp: Date;
+    senderId: string;
+    senderName: string;
+    messageType: MessageType;
+  };
+  unreadCount: number;
+  isOnline?: boolean;
+  isPinned: boolean;
+  isArchived: boolean;
+  isMuted: boolean;
+  lastSeen?: Date;
+  chatType: ChatType;
+  participants: {
+    id: string;
+    name: string;
+    avatar?: string;
+    isOnline: boolean;
+  }[];
+}
+
+// Real-time updates
+export interface IChatUpdates {
+  newMessage?: IMessage;
+  messageUpdate?: { messageId: string; updates: Partial<IMessage> };
+  messageDelete?: { messageId: string };
+  typingUsers?: ITypingUser[];
+  onlineUsers?: string[];
+  chatUpdate?: Partial<IChat>;
+  participantUpdate?: { userId: string; updates: Partial<IChatParticipant> };
+}
+
+// WebSocket message types
+export type WebSocketMessage = {
+  type: 'join-chat' | 'leave-chat' | 'send-message' | 'typing-start' | 'typing-stop' | 'mark-read';
+  chatId: string;
+  data?: any;
+};
+
 // NextAuth module declarations
 declare module "next-auth" {
   interface Session {

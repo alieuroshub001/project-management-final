@@ -1,4 +1,5 @@
 // components/Chat/AnnouncementCenter.tsx
+"use client";
 import { Megaphone, Pin, Calendar, Users } from 'lucide-react';
 
 export function AnnouncementCenter() {

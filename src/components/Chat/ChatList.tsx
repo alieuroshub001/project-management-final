@@ -9,7 +9,7 @@ import {
 } from '@/types/chat';
 import ChatCard from './ChatCard';
 import ChatFilters from './ChatFilters';
-import NewChatModal from './NewChatModal';
+import SimpleNewChatModal from './SimpleNewChatModal';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { 
   Search, 
@@ -256,7 +256,7 @@ export default function ChatList({
 
       {/* New Chat Modal */}
       {showNewChatModal && (
-        <NewChatModal
+        <SimpleNewChatModal
           onClose={() => setShowNewChatModal(false)}
           onSuccess={(chatId) => {
             setShowNewChatModal(false);

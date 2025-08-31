@@ -1,4 +1,5 @@
 // components/Employee/Chat/RecentAnnouncements.tsx
+"use client";
 import { IAnnouncement } from '@/types/chat';
 import { Megaphone, Pin, Calendar } from 'lucide-react';
 

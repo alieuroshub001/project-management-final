@@ -1,4 +1,5 @@
 // components/Employee/Chat/ChatSettings.tsx
+"use client";
 import { Settings, Bell, Moon, Globe, Shield } from 'lucide-react';
 
 export function ChatSettings() {

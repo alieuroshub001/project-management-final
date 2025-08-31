@@ -1,4 +1,5 @@
 // components/Employee/Chat/RecentChats.tsx
+"use client";
 import { IChat } from '@/types/chat';
 import ChatCard from './ChatCard';
 import { MessageSquare } from 'lucide-react';

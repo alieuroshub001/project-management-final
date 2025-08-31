@@ -2,15 +2,15 @@
 "use client";
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import ChatModule from '@/components/Chat/ChatModule';
+import SafeChatModule from '@/components/Chat/SafeChatModule';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 function ChatPageContent() {
   const searchParams = useSearchParams();
-  const tab = searchParams.get('tab') || 'dashboard';
+  const tab = searchParams.get('tab') || 'chats';
   const chatId = searchParams.get('chatId');
 
-  return <ChatModule initialTab={tab as any} selectedChatId={chatId || undefined} />;
+  return <SafeChatModule initialTab={tab as any} selectedChatId={chatId || undefined} />;
 }
 
 export default function ChatPage() {

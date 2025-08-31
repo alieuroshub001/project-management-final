@@ -1,4 +1,5 @@
 // components/Employee/Chat/ChatInfo.tsx
+"use client";
 import { IChatWithDetails } from '@/types/chat';
 import { X, Users, Settings, Bell, Archive, Trash2 } from 'lucide-react';
 

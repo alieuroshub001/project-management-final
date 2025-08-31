@@ -1,43 +1,67 @@
-// src/middleware.ts
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 
-const authRoutes = ['/auth/employee/login', '/auth/employee/signup', '/auth/employee/forgot-password'];
-const protectedRoutes = ['/employee', '/employee/dashboard', '/api'];
-const nextAuthApiRoutes = ['/auth/:path*'];
+const AUTH_ROUTES = [
+  '/auth/employee/login',
+  '/auth/employee/signup',
+  '/auth/employee/forgot-password'
+] as const;
+
+const PROTECTED_ROUTES = [
+  '/employee',
+  '/employee/dashboard',
+  '/api'
+] as const;
+
+const NEXTAUTH_API_PATTERN = /^\/auth\/.*/;
+const DEFAULT_DASHBOARD_URL = '/employee/dashboard';
+const DEFAULT_LOGIN_URL = '/auth/employee/login';
+
+type RouteType = 'auth' | 'protected' | 'nextauth-api' | 'public-api' | 'other';
+
+function getRouteType(path: string): RouteType {
+  if (NEXTAUTH_API_PATTERN.test(path)) {
+    return 'nextauth-api';
+  }
+  
+  if (AUTH_ROUTES.some(route => path.startsWith(route))) {
+    return 'auth';
+  }
+  
+  if (PROTECTED_ROUTES.some(route => path.startsWith(route))) {
+    return 'protected';
+  }
+  
+  if (path.startsWith('/api')) {
+    return 'public-api';
+  }
+  
+  return 'other';
+}
+
+function createRedirectResponse(url: string, request: NextRequest): NextResponse {
+  return NextResponse.redirect(new URL(url, request.url));
+}
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  const isAuthRoute = authRoutes.some(route => path.startsWith(route));
-  const isProtectedRoute = protectedRoutes.some(route => path.startsWith(route));
-  const isNextAuthApi = nextAuthApiRoutes.some(route => 
-    path.match(new RegExp(route.replace(':path*', '.*')))
-  );
+  const routeType = getRouteType(path);
 
-  // Always allow NextAuth API routes
-  if (isNextAuthApi) {
+  if (routeType === 'nextauth-api' || routeType === 'public-api' || routeType === 'other') {
     return NextResponse.next();
   }
 
-  // Skip middleware for public API routes (excluding protected ones)
-  if (path.startsWith('/api') && !isProtectedRoute) {
-    return NextResponse.next();
-  }
-
-  const token = await getToken({ 
+  const token = await getToken({
     req: request,
-    // Specify the custom base path for token retrieval
     secret: process.env.NEXTAUTH_SECRET,
   });
 
-  // Redirect authenticated users away from auth routes
-  if (isAuthRoute && token) {
-    return NextResponse.redirect(new URL('/employee/dashboard', request.url));
+  if (routeType === 'auth' && token) {
+    return createRedirectResponse(DEFAULT_DASHBOARD_URL, request);
   }
 
-  // Protect routes that require authentication
-  if (isProtectedRoute && !token) {
-    return NextResponse.redirect(new URL('/auth/employee/login', request.url));
+  if (routeType === 'protected' && !token) {
+    return createRedirectResponse(DEFAULT_LOGIN_URL, request);
   }
 
   return NextResponse.next();
