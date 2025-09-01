@@ -146,8 +146,7 @@ export const authOptions: AuthOptions = {
   },
   pages: {
     signIn: '/auth/employee/login',
-    error: '/auth/employee/login',
-    verifyRequest: '/auth/employee/login'
+    error: '/auth/employee/login'
   },
   secret: process.env.NEXTAUTH_SECRET,
   session: {
@@ -156,5 +155,3 @@ export const authOptions: AuthOptions = {
   }
 };
 
-// Export the NextAuth handler
-export default NextAuth(authOptions);
